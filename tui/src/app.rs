@@ -6,6 +6,7 @@ use crate::pages::{DevicePage, Page, WelcomePage};
 use penumbra::da::DAFile;
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use ratatui::{DefaultTerminal, Frame};
+use std::path::PathBuf;
 use std::{io::Result, time::Duration};
 
 #[derive(PartialEq, Clone, Copy, Default)]
@@ -17,7 +18,7 @@ pub enum AppPage {
 
 #[derive(Default)]
 pub struct AppCtx {
-    loader: Option<DAFile>,
+    loader: Option<Loader>,
     exit: bool,
     current_page_id: AppPage,
     next_page_id: Option<AppPage>
@@ -28,12 +29,47 @@ pub struct App {
     pub context: AppCtx,
 }
 
-impl AppCtx {
-    pub fn set_loader(&mut self, loader: DAFile) {
-        self.loader = Some(loader);
+pub struct Loader {
+    path: PathBuf,
+    file: DAFile
+}
+impl Loader {
+    pub fn new(path: PathBuf, file: DAFile) -> Self {
+        Self {
+            path,
+            file
+        }
     }
-    pub fn loader(&self) -> Option<&DAFile> {
+    pub fn file(&self) -> &DAFile {
+        &self.file
+    }
+    pub fn _path(&self) -> &PathBuf {
+        &self.path
+    }
+    pub fn loader_name(&self) -> Option<String> {
+        self.path.file_name()
+            .and_then(|name| name.to_str())
+            .map(|s| s.to_string())
+    }
+}
+
+impl AppCtx {
+    pub fn loader(&self) -> Option<&Loader> {
         self.loader.as_ref()
+    }
+    pub fn set_loader(&mut self, loader_path: PathBuf, loader_file: DAFile) {
+        if let Some(loader) = self.loader.as_mut() {
+            loader.path = loader_path;
+            loader.file = loader_file;
+        } else {
+            self.loader = Some(Loader::new(loader_path, loader_file));
+        }
+    }
+    pub fn loader_name(&self) -> String {
+        self.loader
+            .as_ref()
+            .and_then(|l| l.loader_name())
+            .unwrap_or("Unknown DA".to_string())
     }
     pub fn change_page(&mut self, page: AppPage) {
         self.next_page_id = Some(page);

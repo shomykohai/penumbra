@@ -79,9 +79,8 @@ impl DevicePage {
 
                 let da_data: Vec<u8> = ctx
                     .loader()
-                    .map(|loader| loader.da_raw_data.as_slice())
-                    .ok_or_else(|| DeviceStatus::Error("No DA loader in context".to_string()))?
-                    .to_vec();
+                    .map(|loader| loader.file().da_raw_data.as_slice().to_vec())
+                    .ok_or_else(|| DeviceStatus::Error("No DA loader in context".to_string()))?;
 
                 let mut dev = Device::init(port, da_data)
                     .await

@@ -35,7 +35,6 @@ pub struct WelcomePage {
     state: WelcomeState,
     actions: Vec<MenuAction>,
     selected_idx: usize,
-    loader_name: Option<String>,
 }
 
 impl WelcomePage {
@@ -70,9 +69,9 @@ impl Page for WelcomePage {
 
         // Loader info (show filename or None)
         let loader_text = ctx.loader()
-            .as_ref()
-            .map(|_| format!("Selected Loader: {}", self.loader_name.as_deref().unwrap_or("Unnamed DA")))
+            .map(|_| format!("Selected Loader: {}", ctx.loader_name()))
             .unwrap_or_else(|| "Selected Loader: None".to_string());
+
 
         let loader_paragraph = Paragraph::new(loader_text)
             .style(Style::default().fg(Color::Yellow))
@@ -121,14 +120,8 @@ impl Page for WelcomePage {
                             match fs::read(path) {
                                 Ok(raw_data) => match DAFile::parse_da(&raw_data) {
                                     Ok(da_file) => {
-                                        self.loader_name = Some(
-                                            path.file_name()
-                                                .and_then(|name| name.to_str())
-                                                .unwrap_or("Unnamed DA")
-                                                .to_string(),
-                                        );
+                                        ctx.set_loader(path.to_path_buf(), da_file);
                                         self.state = WelcomeState::Idle;
-                                        ctx.set_loader(da_file);
                                     }
                                     Err(err) => {
                                         unimplemented!("Error handling unimplemented: {:?}", err);
