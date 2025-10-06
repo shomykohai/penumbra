@@ -43,11 +43,11 @@ impl Loader {
     pub fn file(&self) -> &DAFile {
         &self.file
     }
-    pub fn _path(&self) -> &PathBuf {
+    pub fn path(&self) -> &PathBuf {
         &self.path
     }
     pub fn loader_name(&self) -> Option<String> {
-        self.path.file_name()
+        self.path().file_name()
             .and_then(|name| name.to_str())
             .map(|s| s.to_string())
     }
