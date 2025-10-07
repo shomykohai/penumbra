@@ -1,3 +1,4 @@
+use crate::components::dialog::{Dialog, DialogButton, DialogType};
 /*
     SPDX-License-Identifier: AGPL-3.0-or-later
     SPDX-FileCopyrightText: 2025 Shomy
@@ -21,7 +22,8 @@ pub struct AppCtx {
     loader: Option<Loader>,
     exit: bool,
     current_page_id: AppPage,
-    next_page_id: Option<AppPage>
+    next_page_id: Option<AppPage>,
+    pub dialog: Option<Dialog>
 }
 
 pub struct App {
@@ -112,6 +114,22 @@ impl App {
                     self.context.quit();
                 }
 
+                if let Some(dialog) = &mut self.context.dialog {
+                    match key.code {
+                        KeyCode::Left => dialog.move_left(),
+                        KeyCode::Right => dialog.move_right(),
+                        KeyCode::Enter => {
+                            dialog.press_selected();
+                            self.context.dialog = None;
+                        },
+                        KeyCode::Esc => {
+                            self.context.dialog = None;
+                        },
+                        _ => {}
+                    }
+                    return Ok(());
+                }
+
                 self.current_page.handle_input(&mut self.context, key).await;
             }
         }
@@ -119,7 +137,13 @@ impl App {
     }
 
     fn draw(&mut self, frame: &mut Frame<'_>) {
+        let size = frame.area();
+
         self.current_page.render(frame, &mut self.context);
+
+        if let Some(dialog) = &self.context.dialog {
+            dialog.render(size, frame.buffer_mut());
+        }
     }
 
     pub async fn switch_to(&mut self, page: AppPage) {
