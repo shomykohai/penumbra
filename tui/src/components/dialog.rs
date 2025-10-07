@@ -24,10 +24,23 @@ pub struct DialogButton {
     pub action: Box<dyn FnMut() + Send>,
 }
 
+impl DialogButton {
+    pub fn new<F>(title: &str, action: F) -> Self
+    where
+        F: FnMut() + Send + 'static
+    {
+        Self {
+            title: title.to_string(),
+            action: Box::new(action),
+        }
+    }
+}
+
 pub struct DialogColors {
     title_color: Color,
     bg_color: Color
 }
+
 impl DialogColors {
     pub fn new(title_color: Color, bg_color: Color) -> Self {
         Self {
