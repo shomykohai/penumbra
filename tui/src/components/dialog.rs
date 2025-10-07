@@ -1,0 +1,138 @@
+/*
+    SPDX-License-Identifier: AGPL-3.0-or-later
+    SPDX-FileCopyrightText: 2025 DiabloSat
+*/
+use ratatui::{
+    prelude::*,
+    widgets::{Block, Borders, Paragraph, Widget, Wrap},
+};
+use strum_macros::AsRefStr;
+
+#[derive(Clone, Copy, AsRefStr)]
+#[allow(unused)]
+pub enum DialogType {
+    #[strum(serialize = "[!] ERROR")]
+    Error,
+    #[strum(serialize = "[i] INFO")]
+    Info,
+    #[strum(serialize = "[o] DIALOG")]
+    Other
+}
+
+pub struct DialogButton {
+    pub title: String,
+    pub action: Box<dyn FnMut() + Send>,
+}
+
+pub struct DialogColors {
+    title_color: Color,
+    bg_color: Color
+}
+impl DialogColors {
+    pub fn new(title_color: Color, bg_color: Color) -> Self {
+        Self {
+            title_color,
+            bg_color,
+        }
+    }
+}
+
+pub struct Dialog {
+    pub dialog_type: DialogType,
+    pub message: String,
+    pub buttons: Vec<DialogButton>,
+    pub selected: usize,
+    pub colors: DialogColors
+}
+
+impl Dialog {
+    pub fn new(dialog_type: DialogType, message: &str, buttons: Vec<DialogButton>) -> Self {
+        let colors: DialogColors = match dialog_type {
+            DialogType::Error => DialogColors::new(Color::Red, Color::Black),
+            DialogType::Info => DialogColors::new(Color::Cyan, Color::Black),
+            DialogType::Other => DialogColors::new(Color::Gray, Color::Black),
+        };
+
+        Self {
+            dialog_type,
+            message: message.to_string(),
+            buttons,
+            selected: 0,
+            colors,
+        }
+    }
+    pub fn render(&self, area: Rect, buf: &mut Buffer) {
+        let width = area.width / 2;
+        let height = area.height / 2;
+        let x = area.x + (area.width - width) / 2;
+        let y = area.y + (area.height - height) / 2;
+        let dialog_area = Rect::new(x, y, width, height);
+
+        // Force clear the dialog area so that there is no garbage left on the dialog
+        Self::clean_area(&dialog_area, buf, Color::Black);
+
+        let block = Block::default()
+            .title(Span::styled(self.dialog_type.as_ref(), Style::default().fg(self.colors.title_color)))
+            .borders(Borders::ALL)
+            .style(Style::default().bg(self.colors.bg_color).fg(Color::White));
+
+        block.clone().render(dialog_area, buf);
+
+        let inner = block.inner(dialog_area);
+
+        Paragraph::new(&*self.message)
+            .alignment(Alignment::Center)
+            .wrap(Wrap { trim: true })
+            .style(Style::default().fg(Color::White).bg(self.colors.bg_color))
+            .render(inner, buf);
+
+        // Buttons
+        self.init_buttons(&inner, buf);
+    }
+
+    fn init_buttons(&self, inner: &Rect, buffer: &mut Buffer) {
+        let buttons_y = inner.y + inner.height.saturating_sub(2);
+        let total_width: u16 = self.buttons.iter().map(|b| b.title.len() as u16 + 4).sum();
+        let mut buttons_x = inner.x + (inner.width.saturating_sub(total_width)) / 2;
+
+        for (i, button) in self.buttons.iter().enumerate() {
+            let style = if i == self.selected {
+                Style::default().bg(self.colors.title_color).fg(self.colors.bg_color)
+            } else {
+                Style::default().bg(self.colors.bg_color).fg(self.colors.title_color)
+            };
+
+            let label = format!("[ {} ]", button.title);
+            buffer.set_string(buttons_x, buttons_y, &label, style);
+            buttons_x += label.len() as u16 + 1;
+        }
+    }
+
+    fn clean_area(area: &Rect, buffer: &mut Buffer, bg_color: Color) {
+        for y in area.y..area.y + area.height {
+            buffer.set_stringn(area.x, y, " ".repeat(area.width as usize), area.width as usize,
+                Style::default().bg(bg_color));
+        }
+    }
+}
+
+// Actions
+impl Dialog {
+    pub fn press_selected(&mut self) {
+        if let Some(button) = self.buttons.get_mut(self.selected) {
+            (button.action)();
+        }
+    }
+
+    pub fn move_left(&mut self) {
+        if self.selected > 0 {
+            self.selected -= 1;
+        }
+    }
+
+    pub fn move_right(&mut self) {
+        if self.selected + 1 < self.buttons.len() {
+            self.selected += 1;
+        }
+    }
+}

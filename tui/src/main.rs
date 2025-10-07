@@ -4,6 +4,7 @@
 */
 mod app;
 mod pages;
+mod components;
 use app::App;
 use env_logger::Builder;
 use std::fs::File;
