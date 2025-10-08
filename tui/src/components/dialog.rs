@@ -1,6 +1,8 @@
+use derive_builder::Builder;
 /*
     SPDX-License-Identifier: AGPL-3.0-or-later
     SPDX-FileCopyrightText: 2025 DiabloSat
+    SPDX-FileCopyrightText: 2025 Shomy
 */
 use ratatui::{
     prelude::*,
@@ -8,7 +10,7 @@ use ratatui::{
 };
 use strum_macros::AsRefStr;
 
-#[derive(Clone, Copy, AsRefStr)]
+#[derive(Clone, Copy, AsRefStr, Default)]
 #[allow(unused)]
 pub enum DialogType {
     #[strum(serialize = "[!] ERROR")]
@@ -16,6 +18,7 @@ pub enum DialogType {
     #[strum(serialize = "[i] INFO")]
     Info,
     #[strum(serialize = "[o] DIALOG")]
+    #[default]
     Other
 }
 
@@ -36,6 +39,16 @@ impl DialogButton {
     }
 }
 
+impl Clone for DialogButton {
+    fn clone(&self) -> Self {
+        Self {
+            title: self.title.clone(),
+            action: Box::new(|| {}),
+        }
+    }
+}
+
+#[derive(Clone)]
 pub struct DialogColors {
     title_color: Color,
     bg_color: Color
@@ -50,30 +63,20 @@ impl DialogColors {
     }
 }
 
+#[derive(Builder)]
 pub struct Dialog {
+    #[builder(default)]
     pub dialog_type: DialogType,
+    #[builder(setter(into))]
     pub message: String,
+    #[builder(default, setter(each = "button"))]
     pub buttons: Vec<DialogButton>,
+    #[builder(default)]
     pub selected: usize,
     pub colors: DialogColors
 }
 
 impl Dialog {
-    pub fn new(dialog_type: DialogType, message: &str, buttons: Vec<DialogButton>) -> Self {
-        let colors: DialogColors = match dialog_type {
-            DialogType::Error => DialogColors::new(Color::Red, Color::Black),
-            DialogType::Info => DialogColors::new(Color::Cyan, Color::Black),
-            DialogType::Other => DialogColors::new(Color::Gray, Color::Black),
-        };
-
-        Self {
-            dialog_type,
-            message: message.to_string(),
-            buttons,
-            selected: 0,
-            colors,
-        }
-    }
     pub fn render(&self, area: Rect, buf: &mut Buffer) {
         let width = area.width / 2;
         let height = area.height / 2;
@@ -147,5 +150,32 @@ impl Dialog {
         if self.selected + 1 < self.buttons.len() {
             self.selected += 1;
         }
+    }
+}
+
+#[allow(unused)]
+impl DialogBuilder {
+    pub fn error(message: impl Into<String>) -> Self {
+        let mut builder = DialogBuilder::default();
+        builder.dialog_type(DialogType::Error);
+        builder.colors(DialogColors::new(Color::Red, Color::Black));
+        builder.message(message);
+        builder
+    }
+
+    pub fn info(message: impl Into<String>) -> Self {
+        let mut builder = DialogBuilder::default();
+        builder.dialog_type(DialogType::Info);
+        builder.colors(DialogColors::new(Color::Cyan, Color::Black));
+        builder.message(message);
+        builder
+    }
+
+    pub fn other(message: impl Into<String>) -> Self {
+        let mut builder = DialogBuilder::default();
+        builder.dialog_type(DialogType::Other);
+        builder.colors(DialogColors::new(Color::Gray, Color::Black));
+        builder.message(message);
+        builder
     }
 }
