@@ -121,7 +121,7 @@ impl DAFile {
                     offset,
                     length,
                     addr,
-                    region_offset: offset - sig_len,
+                    region_offset: length - sig_len,
                     sig_len,
                 });
                 current_region_offset += 20; // Move to the next region header
