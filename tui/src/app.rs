@@ -1,9 +1,9 @@
-use crate::components::dialog::{Dialog, DialogButton, DialogType};
 /*
     SPDX-License-Identifier: AGPL-3.0-or-later
     SPDX-FileCopyrightText: 2025 Shomy
 */
 use crate::pages::{DevicePage, Page, WelcomePage};
+use crate::components::dialog::{Dialog, DialogBuilder};
 use penumbra::da::DAFile;
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use ratatui::{DefaultTerminal, Frame};
@@ -72,6 +72,9 @@ impl AppCtx {
             .as_ref()
             .and_then(|l| l.loader_name())
             .unwrap_or("Unknown DA".to_string())
+    }
+    pub fn set_dialog(&mut self, dialog: &mut DialogBuilder) {
+        self.dialog = Some(dialog.build().expect("Failed to build dialog"));
     }
     pub fn change_page(&mut self, page: AppPage) {
         self.next_page_id = Some(page);
