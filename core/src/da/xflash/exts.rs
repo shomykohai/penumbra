@@ -12,20 +12,19 @@
     the combined work is subject to the networking terms of the AGPL-3.0-or-later,
     as for term 13 of the GPL-3.0-or-later license.
 */
+use crate::error::{Error, Result};
 use crate::core::utilities::find_pattern;
 use crate::da::DAProtocol;
 use crate::da::xflash::{Cmd, DataType, XFlash};
 use log::{debug, info};
-use tokio::io::AsyncWriteExt;
-use tokio::io::{Error, ErrorKind};
 
 const DA_EXT: &[u8] = include_bytes!("../../../payloads/da_x.bin");
 
-pub async fn boot_extensions(xflash: &mut XFlash) -> Result<bool, Error> {
+pub async fn boot_extensions(xflash: &mut XFlash) -> Result<bool> {
     debug!("Trying booting XFlash extensions...");
 
     let ext_data = prepare_extensions(xflash)
-        .ok_or_else(|| Error::new(ErrorKind::Other, "Failed to prepare DA extensions"))?;
+        .ok_or_else(|| Error::proto("Failed to prepare DA extensions"))?;
 
     let ext_addr = 0x68000000;
     let ext_size = ext_data.len() as u32;
@@ -46,18 +45,15 @@ pub async fn boot_extensions(xflash: &mut XFlash) -> Result<bool, Error> {
     let ack = xflash.devctrl(Cmd::ExtAck, None).await?;
     let status = xflash.get_status().await?;
     if status != 0 {
-        return Err(Error::new(
-            ErrorKind::Other,
-            format!("DA extensions failed to start: {:#X}", status),
-        ));
+        return Err(Error::proto(format!(
+            "DA extensions failed to start: {:#X}",
+            status
+        )));
     }
 
     // Ack must be 0xA1A2A3A4
     if ack.len() < 4 || ack[0..4] != [0xA4, 0xA3, 0xA2, 0xA1] {
-        return Err(Error::new(
-            ErrorKind::Other,
-            "DA extensions failed to start (invalid ACK)",
-        ));
+        return Err(Error::proto("DA extensions failed to start (invalid ACK)"));
     } else {
         info!("Received ack: {:02X?}", &ack[0..4]);
     }
@@ -93,7 +89,7 @@ fn prepare_extensions(xflash: &XFlash) -> Option<Vec<u8>> {
     while let Some(pos) = find_pattern(da2, &[0xC3, 0x69, 0x0A, 0x46, 0x10, 0xB5], search_offset) {
         search_offset = pos + 1;
 
-        if da2.len() >= pos + 22 && &da2[pos + 20..pos + 22] == &[0xB3, 0x21] {
+        if da2.len() >= pos + 22 && da2[pos + 20..pos + 22] == [0xB3, 0x21] {
             mmc_set_part_config = Some(pos);
             break;
         }
@@ -225,15 +221,15 @@ fn prepare_extensions(xflash: &XFlash) -> Option<Vec<u8>> {
 }
 
 // TODO: Rewrite these
-pub async fn read32_ext(xflash: &mut XFlash, addr: u32) -> Result<u32, Error> {
+pub async fn read32_ext(xflash: &mut XFlash, addr: u32) -> Result<u32> {
     xflash.send_cmd(Cmd::DeviceCtrl).await?;
     if xflash.get_status().await? != 0 {
-        return Err(Error::new(ErrorKind::Other, "DEVICE_CTRL failed"));
+        return Err(Error::proto("DEVICE_CTRL failed"));
     }
 
     xflash.send_cmd(Cmd::ExtReadRegister).await?;
     if xflash.get_status().await? != 0 {
-        return Err(Error::new(ErrorKind::Other, "ExtReadRegister failed"));
+        return Err(Error::proto("ExtReadRegister failed"));
     }
 
     let addr_bytes = addr.to_le_bytes();
@@ -252,10 +248,10 @@ pub async fn read32_ext(xflash: &mut XFlash, addr: u32) -> Result<u32, Error> {
     if payload.len() >= 4 {
         let status = xflash.get_status().await?;
         if status != 0 {
-            return Err(Error::new(
-                ErrorKind::Other,
-                format!("ExtReadRegister failed: {:#X}", status),
-            ));
+            return Err(Error::proto(format!(
+                "ExtReadRegister failed: {:#X}",
+                status
+            )));
         }
         Ok(u32::from_le_bytes(payload[0..4].try_into().unwrap()))
     } else {
@@ -264,15 +260,15 @@ pub async fn read32_ext(xflash: &mut XFlash, addr: u32) -> Result<u32, Error> {
     }
 }
 
-pub async fn write32_ext(xflash: &mut XFlash, addr: u32, value: u32) -> Result<(), Error> {
+pub async fn write32_ext(xflash: &mut XFlash, addr: u32, value: u32) -> Result<()> {
     xflash.send_cmd(Cmd::DeviceCtrl).await?;
     if xflash.get_status().await? != 0 {
-        return Err(Error::new(ErrorKind::Other, "DEVICE_CTRL failed"));
+        return Err(Error::proto("DEVICE_CTRL failed"));
     }
 
     xflash.send_cmd(Cmd::ExtWriteRegister).await?;
     if xflash.get_status().await? != 0 {
-        return Err(Error::new(ErrorKind::Other, "ExtWriteRegister failed"));
+        return Err(Error::proto("ExtWriteRegister failed"));
     }
 
     let addr_bytes = addr.to_le_bytes();
@@ -301,10 +297,10 @@ pub async fn write32_ext(xflash: &mut XFlash, addr: u32, value: u32) -> Result<(
 
     let status = xflash.get_status().await?;
     if status != 0 {
-        return Err(Error::new(
-            ErrorKind::Other,
-            format!("ExtWriteRegister failed: {:#X}", status),
-        ));
+        return Err(Error::proto(format!(
+            "ExtWriteRegister failed: {:#X}",
+            status
+        )));
     }
 
     Ok(())

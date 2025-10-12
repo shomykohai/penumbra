@@ -186,7 +186,7 @@ impl<'a> SEJCrypto<'a> {
 
     async fn hw_aes128_cbc_encrypt(&mut self, data: &[u8], encrypt: bool, legacy: bool) -> Vec<u8> {
         self.sej_v3_init(encrypt, &HACC_CFG_1, legacy).await;
-        let ret = self.sej_run(&data).await;
+        let ret = self.sej_run(data).await;
         self.sej_terminate().await;
         ret
     }

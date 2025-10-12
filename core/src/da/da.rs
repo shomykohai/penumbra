@@ -2,8 +2,8 @@
     SPDX-License-Identifier: AGPL-3.0-or-later
     SPDX-FileCopyrightText: 2025 Shomy
 */
+use crate::error::{Error, Result};
 use log::debug;
-use std::io::Error;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum DAType {
@@ -39,7 +39,7 @@ pub struct DAFile {
 }
 
 impl DAFile {
-    pub fn parse_da(raw_data: &[u8]) -> Result<DAFile, Error> {
+    pub fn parse_da(raw_data: &[u8]) -> Result<DAFile> {
         let hdr = &raw_data[..0x6C];
 
         let da_type = if &hdr[0..2] == b"\xDA\xDA" {
@@ -51,8 +51,7 @@ impl DAFile {
         };
 
         if da_type != DAType::Legacy && !hdr.windows(0x12).any(|w| w == b"MTK_DOWNLOAD_AGENT") {
-            return Err(Error::new(
-                std::io::ErrorKind::InvalidData,
+            return Err(Error::penumbra(
                 "Invalid DA file: Missing MTK_DOWNLOAD_AGENT signature",
             ));
         }

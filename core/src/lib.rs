@@ -5,6 +5,7 @@
 pub mod connection;
 pub mod core;
 pub mod da;
+pub mod error;
 pub mod exploit;
 
 pub use connection::port::{MTKPort, find_mtk_port};

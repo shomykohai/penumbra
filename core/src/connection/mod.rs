@@ -7,8 +7,8 @@ mod command;
 pub mod port;
 use crate::connection::command::Command;
 use crate::connection::port::{ConnectionType, MTKPort};
+use crate::error::{Error, Result};
 use log::{debug, error, info};
-use tokio::io::Result;
 
 #[derive(Debug)]
 pub struct Connection {
@@ -44,10 +44,7 @@ impl Connection {
                 "Data mismatch. Expected: {:x?}, Got: {:x?}",
                 expected_data, data
             );
-            Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "Data mismatch",
-            ))
+            Err(Error::conn("Data mismatch"))
         }
     }
 
@@ -55,7 +52,7 @@ impl Connection {
         self.port.write_all(data).await?;
         let mut buf = vec![0u8; size];
         self.port.read_exact(&mut buf).await?;
-        return self.check(&buf, data);
+        self.check(&buf, data)
     }
 
     pub async fn handshake(&mut self) -> Result<()> {
@@ -77,7 +74,7 @@ impl Connection {
         let status_val = u16::from_le_bytes(status);
         if status_val != 0 {
             error!("JumpDA failed with status: {:04X}", status_val);
-            return Err(std::io::Error::new(std::io::ErrorKind::Other, "JumpDA failed").into());
+            return Err(Error::conn("JumpDA failed"));
         }
 
         Ok(())
@@ -103,9 +100,7 @@ impl Connection {
 
         if status_val != 0 {
             error!("SendDA command failed with status: {:04X}", status_val);
-            return Err(
-                std::io::Error::new(std::io::ErrorKind::Other, "SendDA command failed").into(),
-            );
+            return Err(Error::conn("SendDA command failed"));
         }
 
         self.port.write_all(da_data).await?;
@@ -126,11 +121,7 @@ impl Connection {
                 "SendDA data transfer failed with status: {:04X}",
                 status_val
             );
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "SendDA data transfer failed",
-            )
-            .into());
+            return Err(Error::conn("SendDA data transfer failed"));
         }
 
         Ok(())
@@ -148,7 +139,7 @@ impl Connection {
         let status_val = u16::from_le_bytes(status);
         if status_val != 0 {
             error!("GetHwCode failed with status: {:04X}", status_val);
-            return Err(std::io::Error::new(std::io::ErrorKind::Other, "GetHwCode failed").into());
+            return Err(Error::conn("GetHwCode failed"));
         }
 
         Ok(u16::from_le_bytes(hw_code) as u32)
@@ -169,10 +160,8 @@ impl Connection {
 
         let status_val = u16::from_le_bytes(status);
         if status_val != 0 {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Status is 0x{:04X}", status_val),
-            ));
+            error!("GetHwSwVer failed with status: 0x{:04X}", status_val);
+            return Err(Error::conn("GetHwSwVer failed"));
         }
 
         Ok((
@@ -198,7 +187,7 @@ impl Connection {
 
         if status != 0 {
             error!("GetSocId failed with status: 0x{:04X}", status);
-            return Err(std::io::Error::new(std::io::ErrorKind::Other, "GetSocId failed").into());
+            return Err(Error::conn("GetSocId failed"));
         }
 
         Ok(soc_id)
@@ -220,7 +209,7 @@ impl Connection {
 
         if status != 0 {
             error!("GetMeid failed with status: 0x{:04X}", status);
-            return Err(std::io::Error::new(std::io::ErrorKind::Other, "GetMeid failed").into());
+            return Err(Error::conn("GetMeid failed"));
         }
 
         Ok(meid)

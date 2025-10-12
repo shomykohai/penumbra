@@ -3,12 +3,12 @@
     SPDX-FileCopyrightText: 2025 Shomy
 */
 use crate::connection::port::{ConnectionType, KNOWN_PORTS, MTKPort};
+use crate::error::{Error, Result};
 use log::{debug, error, info};
 use rusb::{Context, Device, DeviceHandle, GlobalContext, UsbContext};
 use rusb::{Direction, Recipient, RequestType};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::io::{Error, ErrorKind, Result};
 use tokio::sync::Mutex;
 use tokio::task;
 
@@ -191,10 +191,7 @@ impl MTKPort for UsbMTKPort {
                                     "Failed to detach kernel driver on interface {}: {:?}",
                                     interface, e
                                 );
-                                return Err(Error::new(
-                                    ErrorKind::Other,
-                                    format!("Detach failed: {:?}", e),
-                                ));
+                                return Err(Error::Io("Failed to detach kernel driver (USB)"));
                             }
                         }
                         Ok(false) => {}
@@ -203,27 +200,21 @@ impl MTKPort for UsbMTKPort {
                                 "Error checking kernel driver on interface {}: {:?}",
                                 interface, e
                             );
-                            return Err(Error::new(
-                                ErrorKind::Other,
-                                format!("Kernel driver check failed: {:?}", e),
-                            ));
+                            return Err(Error::Io("Kernel driver check failed (USB)"));
                         }
                     }
                 }
 
                 if let Err(e) = handle.claim_interface(interface) {
                     error!("Failed to claim interface {}: {:?}", interface, e);
-                    return Err(Error::new(
-                        ErrorKind::Other,
-                        format!("Claim failed: {:?}", e),
-                    ));
+                    return Err(Error::Io("Failed to claim interface (USB)"));
                 }
             }
 
             Ok(())
         })
         .await?
-        .map_err(|e| Error::new(ErrorKind::Other, format!("{:?}", e)))?;
+        .map_err(|e| Error::Io("USB open task failed"));
 
         #[cfg(target_os = "windows")]
         {
@@ -288,10 +279,8 @@ impl MTKPort for UsbMTKPort {
                     let locked = handle.blocking_lock();
                     match locked.read_bulk(endpoint, &mut temp_buf, timeout) {
                         Ok(n) => Ok((temp_buf, n)),
-                        Err(rusb::Error::Timeout) => {
-                            Err(Error::new(ErrorKind::TimedOut, "USB timeout"))
-                        }
-                        Err(e) => Err(Error::new(ErrorKind::Other, e)),
+                        Err(rusb::Error::Timeout) => Err(Error::Io("USB timeout")),
+                        Err(e) => Err(Error::io(e.to_string())),
                     }
                 }
             })
@@ -324,14 +313,14 @@ impl MTKPort for UsbMTKPort {
                 let locked = handle.blocking_lock();
                 match locked.read_bulk(endpoint, &mut response, timeout) {
                     Ok(count) => Ok((response, count)),
-                    Err(e) => Err(Error::new(ErrorKind::Other, e)),
+                    Err(e) => Err(Error::Io("Bulk read failed")),
                 }
             })
             .await
-            .map_err(|e| Error::new(ErrorKind::Other, e))??;
+            .map_err(|e| Error::Io("USB bulk read task failed"))?;
 
             if n == 0 {
-                return Err(Error::new(ErrorKind::UnexpectedEof, "USB returned 0 bytes"));
+                return Err(Error::Io("USB returned 0 bytes"));
             }
 
             let expected = !startcmd[i] & 0xFF;
@@ -356,7 +345,7 @@ impl MTKPort for UsbMTKPort {
         tokio::task::spawn_blocking(move || {
             let locked = handle.blocking_lock();
             let res = locked.write_bulk(endpoint, &data, timeout);
-            res.map_err(|e| Error::new(ErrorKind::Other, e))
+            res.map_err(|e| Error::Io("Bulk write failed"))
         })
         .await
         .unwrap()?;

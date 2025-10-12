@@ -3,7 +3,6 @@
     SPDX-FileCopyrightText: 2025 Shomy
 */
 pub mod serial_backend;
-pub use serial_backend::SerialMTKPort;
 #[cfg(feature = "libusb")]
 pub mod libusb_backend;
 #[cfg(feature = "libusb")]

@@ -41,6 +41,12 @@ pub struct SecCfgV4 {
     algo: Option<SecCfgV4Algo>,
 }
 
+impl Default for SecCfgV4 {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SecCfgV4 {
     pub fn new() -> Self {
         SecCfgV4 {

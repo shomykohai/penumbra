@@ -11,9 +11,11 @@ cipher = "0.4.4"
 env_logger = "0.11.8"
 hex = "0.4.3"
 log = "0.4.27"
+num_enum = "0.7.4"
 rusb = { version = "0.9.4", optional = true}
 serialport = "4.7.3"
 sha2 = "0.10.9"
+thiserror = "2.0.17"
 tokio = {version = "1.47.1", features = ["full"]}
 tokio-serial = "5.4.5"
 

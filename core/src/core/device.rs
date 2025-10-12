@@ -6,12 +6,12 @@ use crate::connection::port::MTKPort;
 use crate::connection::{Connection, port::ConnectionType};
 use crate::core::crypto::config::{CryptoConfig, CryptoIO};
 use crate::core::crypto::sej::SEJCrypto;
+use crate::error::{Error, Result};
 use crate::core::seccfg::LockFlag;
 use crate::core::seccfg::SecCfgV4;
 use crate::core::storage::{Partition, StorageType, parse_gpt};
 use crate::da::{DAFile, DAProtocol, DAType, XFlash};
 use log::{error, info, warn};
-use std::io::{Error, ErrorKind};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -33,7 +33,7 @@ pub struct Device<'a> {
 }
 
 #[async_trait::async_trait]
-impl<'a> CryptoIO for Device<'a> {
+impl CryptoIO for Device<'_> {
     async fn read32(&mut self, addr: u32) -> u32 {
         if let Some(protocol) = &mut self.protocol {
             match protocol.read32(addr).await {
@@ -60,7 +60,7 @@ impl<'a> CryptoIO for Device<'a> {
 }
 
 impl<'a> Device<'a> {
-    pub async fn init(mtk_port: Box<dyn MTKPort>, da_data: Vec<u8>) -> Result<Self, Error> {
+    pub async fn init(mtk_port: Box<dyn MTKPort>, da_data: Vec<u8>) -> Result<Self> {
         let mut connection = Connection::new(mtk_port);
 
         connection.handshake().await?;
@@ -83,10 +83,10 @@ impl<'a> Device<'a> {
             let da = match da_file.get_da_from_hw_code(hw_code) {
                 Some(da) => da,
                 None => {
-                    return Err(Error::new(
-                        ErrorKind::Other,
-                        format!("No suitable DA found for HW code {:02X}", hw_code),
-                    ));
+                    return Err(Error::penumbra(format!(
+                        "No suitable DA found for HW code {:02X}",
+                        hw_code
+                    )));
                 }
             };
 
@@ -94,7 +94,7 @@ impl<'a> Device<'a> {
 
             let protocol: Box<dyn DAProtocol> = match da.da_type {
                 DAType::V5 => Box::new(XFlash::new(connection, da, Arc::clone(&device_info))),
-                _ => return Err(Error::new(ErrorKind::Other, "Unsupported DA type!")),
+                _ => return Err(Error::penumbra("Unsupported DA type!")),
             };
 
             let device = Device {
@@ -117,13 +117,13 @@ impl<'a> Device<'a> {
         }
     }
 
-    pub async fn enter_da_mode(&mut self) -> Result<(), Error> {
+    pub async fn enter_da_mode(&mut self) -> Result<()> {
         if !self.connected {
-            return Err(Error::new(ErrorKind::NotConnected, "Device not connected"));
+            return Err(Error::conn("Device not connected"));
         }
 
         if self.protocol.is_none() {
-            return Err(Error::new(ErrorKind::Other, "No DA protocol available"));
+            return Err(Error::proto("No DA protocol available"));
         }
 
         let protocol = self.protocol.as_mut().unwrap();
@@ -154,9 +154,9 @@ impl<'a> Device<'a> {
         &mut self,
         name: &str,
         progress: &mut (dyn FnMut(usize, usize) + Send),
-    ) -> Result<Vec<u8>, Error> {
+    ) -> Result<Vec<u8>> {
         if self.protocol.is_none() {
-            return Err(Error::new(ErrorKind::Other, "No DA protocol available"));
+            return Err(Error::proto("No DA protocol available"));
         }
 
         let conn = self.get_connection()?;
@@ -167,23 +167,20 @@ impl<'a> Device<'a> {
 
         let dev_info_rc = match &self.dev_info {
             Some(info) => Arc::clone(info),
-            None => return Err(Error::new(ErrorKind::Other, "Device info not available")),
+            None => return Err(Error::penumbra("Device info not available")),
         };
 
         let dev_info = dev_info_rc.lock().await;
         let partition = match dev_info.partitions.iter().find(|p| p.name == name) {
             Some(part) => part,
             None => {
-                return Err(Error::new(
-                    ErrorKind::NotFound,
-                    format!("Partition '{}' not found", name),
-                ));
+                return Err(Error::proto(format!("Partition '{}' not found", name)));
             }
         };
 
         let protocol = self.protocol.as_mut().unwrap();
         protocol
-            .read_flash(partition.address, partition.size as usize, progress)
+            .read_flash(partition.address, partition.size, progress)
             .await
     }
 
@@ -192,9 +189,9 @@ impl<'a> Device<'a> {
         name: &str,
         data: &[u8],
         progress: &mut (dyn FnMut(usize, usize) + Send),
-    ) -> Result<(), Error> {
+    ) -> Result<()> {
         if self.protocol.is_none() {
-            return Err(Error::new(ErrorKind::Other, "No DA protocol available"));
+            return Err(Error::proto("No DA protocol available"));
         }
 
         let conn = self.get_connection()?;
@@ -205,29 +202,23 @@ impl<'a> Device<'a> {
 
         let dev_info_rc = match &self.dev_info {
             Some(info) => Arc::clone(info),
-            None => return Err(Error::new(ErrorKind::Other, "Device info not available")),
+            None => return Err(Error::penumbra("Device info not available")),
         };
 
         let dev_info = dev_info_rc.lock().await;
         let partition = match dev_info.partitions.iter().find(|p| p.name == name) {
             Some(part) => part,
             None => {
-                return Err(Error::new(
-                    ErrorKind::NotFound,
-                    format!("Partition '{}' not found", name),
-                ));
+                return Err(Error::proto(format!("Partition '{}' not found", name)));
             }
         };
 
         if data.len() > partition.size {
-            return Err(Error::new(
-                ErrorKind::InvalidInput,
-                format!(
-                    "Data size {} exceeds partition size {}",
-                    data.len(),
-                    partition.size
-                ),
-            ));
+            return Err(Error::penumbra(format!(
+                "Data size {} exceeds partition size {}",
+                data.len(),
+                partition.size
+            )));
         }
 
         let protocol = self.protocol.as_mut().unwrap();
@@ -236,16 +227,13 @@ impl<'a> Device<'a> {
             .await
     }
 
-    pub fn get_connection(&mut self) -> Result<&mut Connection, std::io::Error> {
+    pub fn get_connection(&mut self) -> Result<&mut Connection> {
         if let Some(conn) = &mut self.connection {
             Ok(conn)
         } else if let Some(protocol) = &mut self.protocol {
             Ok(protocol.get_connection())
         } else {
-            Err(std::io::Error::new(
-                std::io::ErrorKind::NotConnected,
-                "No connection available",
-            ))
+            Err(Error::conn("No connection available"))
         }
     }
 
@@ -254,9 +242,7 @@ impl<'a> Device<'a> {
     }
 
     pub async fn set_seccfg_lock_state(&mut self, lock_state: LockFlag) -> Option<Vec<u8>> {
-        if self.protocol.is_none() {
-            return None;
-        }
+        self.protocol.as_ref()?;
 
         let conn = self.get_connection().ok()?;
         if conn.connection_type != ConnectionType::Da {

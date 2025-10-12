@@ -3,8 +3,8 @@
     SPDX-FileCopyrightText: 2025 Shomy
 */
 
+use crate::error::Result;
 use std::fmt::Debug;
-use tokio::io::Result;
 
 pub const KNOWN_PORTS: &[(u16, u16)] = &[
     (0x0e8d, 0x0003), // Mediatek USB Port (BROM)

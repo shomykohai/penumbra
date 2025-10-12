@@ -3,14 +3,14 @@
     SPDX-FileCopyrightText: 2025 Shomy
 */
 use crate::connection::port::{ConnectionType, KNOWN_PORTS, MTKPort};
-use log::{debug, error, info};
-use std::io::{Error, ErrorKind};
-use tokio::io::Result;
+use crate::error::{Error, Result};
+use log::{error, info};
+// use std::io::{Error, ErrorKind};
+use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio_serial::{
     SerialPort, SerialPortBuilderExt, SerialPortInfo, SerialPortType, SerialStream,
 };
-use std::time::Duration;
 
 #[derive(Debug)]
 pub struct SerialMTKPort {
@@ -68,7 +68,8 @@ impl MTKPort for SerialMTKPort {
             self.port = Some(
                 tokio_serial::new(&self.port_info.port_name, self.baudrate)
                     .timeout(Duration::from_millis(1000))
-                    .open_native_async()?,
+                    .open_native_async()
+                    .map_err(|e| Error::io(e.to_string()))?,
             );
             self.is_open = true;
             info!(
@@ -89,35 +90,31 @@ impl MTKPort for SerialMTKPort {
 
     async fn read_exact(&mut self, buf: &mut [u8]) -> Result<usize> {
         if let Some(port) = &mut self.port {
-            port.read_exact(buf).await
+            port.read_exact(buf)
+                .await
+                .map_err(|e| Error::Io(e.to_string()))
         } else {
-            Err(Error::new(
-                ErrorKind::NotConnected,
-                "Port is not open",
-            ))
+            Err(Error::io("Port is not open"))
         }
     }
 
     async fn write_all(&mut self, buf: &[u8]) -> Result<()> {
         if let Some(port) = &mut self.port {
-            port.write_all(buf).await
+            port.write_all(buf)
+                .await
+                .map_err(|e| Error::Io(e.to_string()))
         } else {
-            Err(Error::new(
-                ErrorKind::NotConnected,
-                "Port is not open",
-            ))
+            Err(Error::io("Port is not open"))
         }
     }
 
     async fn flush(&mut self) -> Result<()> {
         if let Some(port) = &mut self.port {
-            port.clear(tokio_serial::ClearBuffer::Input)?;
+            port.clear(tokio_serial::ClearBuffer::Input)
+                .map_err(|e| Error::Io(e.to_string()));
             Ok(())
         } else {
-            Err(Error::new(
-                ErrorKind::NotConnected,
-                "Port is not open",
-            ))
+            Err(Error::io("Port is not open"))
         }
     }
 
@@ -138,40 +135,27 @@ impl MTKPort for SerialMTKPort {
             port.write_all(&[0x0A]).await?;
             let mut r1 = [0u8; 1];
             port.read_exact(&mut r1).await?;
-            if r1 != [0xF5]
-             {
-                return Err(Error::new(
-                    ErrorKind::Other,
-                    "Handshake failed: Expected 0xF5",
-                ));
+            if r1 != [0xF5] {
+                return Err(Error::io("Handshake failed: Expected 0xF5"));
             }
 
             port.write_all(&[0x50]).await?;
             let mut r2 = [0u8; 1];
             port.read_exact(&mut r2).await?;
             if r2 != [0xAF] {
-                return Err(Error::new(
-                    ErrorKind::Other,
-                    "Handshake failed: Expected 0xAF",
-                ));
+                return Err(Error::io("Handshake failed: Expected 0xAF"));
             }
 
             port.write_all(&[0x05]).await?;
             let mut r3 = [0u8; 1];
             port.read_exact(&mut r3).await?;
             if r3 != [0xFA] {
-                return Err(Error::new(
-                    ErrorKind::Other,
-                    "Handshake failed: Expected 0xFA",
-                ));
+                return Err(Error::io("Handshake failed: Expected 0xFA"));
             }
 
             Ok(())
         } else {
-            Err(Error::new(
-                ErrorKind::NotConnected,
-                "Port is not open",
-            ))
+            Err(Error::io("Port is not open"))
         }
     }
 

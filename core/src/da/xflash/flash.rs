@@ -5,15 +5,15 @@
 use crate::da::DAProtocol;
 use crate::da::xflash::XFlash;
 use crate::da::xflash::cmds::*;
-use log::{debug, info};
-use std::io::{Error, ErrorKind, Write};
+use crate::error::{Error, Result, XFlashError};
+use log::{debug, error, info};
 
 pub async fn read_flash<F>(
     xflash: &mut XFlash,
     addr: u64,
     size: usize,
     mut progress: F,
-) -> Result<Vec<u8>, Error>
+) -> Result<Vec<u8>>
 where
     F: FnMut(usize, usize),
 {
@@ -53,23 +53,14 @@ where
 
     let status = xflash.get_status().await?;
     if status != 0 {
-        return Err(Error::new(
-            ErrorKind::Other,
-            format!("Device returned error status: {:#X}", status),
-        ));
+        return Err(Error::XFlash(XFlashError::from_code(status)));
     }
 
     xflash.send_data(&param).await?;
 
     let status = xflash.get_status().await?;
     if status != 0 {
-        return Err(Error::new(
-            ErrorKind::Other,
-            format!(
-                "Device returned error status after sending parameters: {:#X}",
-                status
-            ),
-        ));
+        return Err(Error::XFlash(XFlashError::from_code(status)));
     }
 
     let mut buffer = Vec::with_capacity(size);
@@ -124,7 +115,7 @@ pub async fn write_flash<F>(
     size: usize,
     data: &[u8],
     mut progress: F,
-) -> Result<(), Error>
+) -> Result<()>
 where
     F: FnMut(usize, usize),
 {
@@ -183,11 +174,9 @@ where
     xflash.send_cmd(Cmd::WriteData).await?;
     let status = xflash.get_status().await?;
     if status != 0 {
-        return Err(Error::new(
-            ErrorKind::Other,
-            format!("Device returned error status: {:#X}", status),
-        ));
+        return Err(Error::XFlash(XFlashError::from_code(status)));
     }
+
     debug!("actual_data.len() = {}, size = {}", actual_data.len(), size);
     debug!("Write data cmd sent, sending parameters...");
     // Note to self: send_data already checks the status, so DON'T check it again!!
@@ -242,13 +231,8 @@ where
 
     let status = xflash.get_status().await?;
     if status != 0 {
-        return Err(Error::new(
-            ErrorKind::Other,
-            format!(
-                "Device returned error status after writing data: {:#X}",
-                status
-            ),
-        ));
+        error!("Device returned status {:#X} after writing data!", status);
+        return Err(Error::XFlash(XFlashError::from_code(status)));
     }
 
     info!("Flash write completed, {} bytes written.", bytes_written);
@@ -256,7 +240,7 @@ where
     Ok(())
 }
 
-pub async fn download(xflash: &mut XFlash, part_name: String, data: &[u8]) -> Result<(), Error> {
+pub async fn download(xflash: &mut XFlash, part_name: String, data: &[u8]) -> Result<()> {
     // Works like write_flash, but instead of address and size, it takes a partition name
     // and writes the whole data to it.
     // The main difference betwen write_flash and this function is that this one
@@ -269,10 +253,7 @@ pub async fn download(xflash: &mut XFlash, part_name: String, data: &[u8]) -> Re
     xflash.send_cmd(Cmd::Download).await?;
     let status = xflash.get_status().await?;
     if status != 0 {
-        return Err(Error::new(
-            ErrorKind::Other,
-            format!("Device returned error status: {:#X}", status),
-        ));
+        return Err(Error::XFlash(XFlashError::from_code(status)));
     }
 
     let data_len = data.len();
@@ -287,13 +268,7 @@ pub async fn download(xflash: &mut XFlash, part_name: String, data: &[u8]) -> Re
 
     let status = xflash.get_status().await?;
     if status != 0 {
-        return Err(Error::new(
-            ErrorKind::Other,
-            format!(
-                "Device returned error status after sending parameters: {:#X}",
-                status
-            ),
-        ));
+        return Err(Error::XFlash(XFlashError::from_code(status)));
     }
 
     // TODO: Figure out what this is actually? The same happens in write_flash
@@ -312,33 +287,22 @@ pub async fn download(xflash: &mut XFlash, part_name: String, data: &[u8]) -> Re
 
     let status = xflash.get_status().await?;
     if status != 0 {
-        return Err(Error::new(
-            ErrorKind::Other,
-            format!(
-                "Device returned error status after data upload: {:#X}",
-                status
-            ),
-        ));
+        error!("Device returned {:#X} after data upload", status);
+        return Err(Error::XFlash(XFlashError::from_code(status)));
     }
 
     Ok(())
 }
 
-async fn get_packet_length(xflash: &mut XFlash) -> Result<(usize, usize), Error> {
+async fn get_packet_length(xflash: &mut XFlash) -> Result<(usize, usize)> {
     let packet_length = xflash.devctrl(Cmd::GetPacketLength, None).await?;
     let status = xflash.get_status().await?;
     if status != 0 {
-        return Err(Error::new(
-            ErrorKind::Other,
-            format!("Device returned error status: {:#X}", status),
-        ));
+        return Err(Error::XFlash(XFlashError::from_code(status)));
     }
 
     if packet_length.len() < 8 {
-        return Err(Error::new(
-            ErrorKind::Other,
-            "Received packet length is too short",
-        ));
+        return Err(Error::proto("Received packet length is too short"));
     }
 
     // TODO: Find a better way of doing this, currently, this is bad
@@ -354,12 +318,12 @@ async fn get_packet_length(xflash: &mut XFlash) -> Result<(usize, usize), Error>
     Ok((write_len, read_len))
 }
 
-async fn get_write_packet_length(xflash: &mut XFlash) -> Result<usize, Error> {
+async fn get_write_packet_length(xflash: &mut XFlash) -> Result<usize> {
     let (write_len, _) = get_packet_length(xflash).await?;
     Ok(write_len)
 }
 
-async fn get_read_packet_length(xflash: &mut XFlash) -> Result<usize, Error> {
+async fn get_read_packet_length(xflash: &mut XFlash) -> Result<usize> {
     let (_, read_len) = get_packet_length(xflash).await?;
     Ok(read_len)
 }

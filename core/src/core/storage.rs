@@ -2,7 +2,7 @@
     SPDX-License-Identifier: AGPL-3.0-or-later
     SPDX-FileCopyrightText: 2025 Shomy
 */
-use std::io::{Error, ErrorKind, Result};
+use crate::error::{Error, Result};
 
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -85,10 +85,7 @@ pub fn parse_gpt(data: &[u8], storage_type: StorageType) -> Result<Vec<Partition
     let sector_size = match sector_size {
         Some(size) => 512,
         None => {
-            return Err(Error::new(
-                ErrorKind::InvalidData,
-                "No valid GPT header found",
-            ));
+            return Err(Error::penumbra("No valid GPT header found"));
         }
     };
 
@@ -98,10 +95,7 @@ pub fn parse_gpt(data: &[u8], storage_type: StorageType) -> Result<Vec<Partition
     let entry_size = u32::from_le_bytes(hdr[84..88].try_into().unwrap());
 
     if entry_size as usize != 128 {
-        return Err(Error::new(
-            ErrorKind::InvalidData,
-            "Unsupported partition entry size",
-        ));
+        return Err(Error::penumbra("Unsupported partition entry size"));
     }
 
     let start_offset = (partition_entry_lba as usize) * sector_size;
@@ -126,10 +120,7 @@ pub fn parse_gpt(data: &[u8], storage_type: StorageType) -> Result<Vec<Partition
         let last_lba = u64::from_le_bytes(entry[40..48].try_into().unwrap());
 
         if last_lba < first_lba {
-            return Err(Error::new(
-                ErrorKind::InvalidData,
-                "Partition last_lba < first_lba",
-            ));
+            return Err(Error::io("Partition last_lba < first_lba"));
         }
 
         let part_size = (last_lba - first_lba + 1) * sector_size as u64;
