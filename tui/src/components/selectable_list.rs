@@ -32,55 +32,55 @@ pub struct SelectableList {
     s.select(Some(0));
     s
 }")]
-pub state: ListState,
-#[builder(default)]
-pub highlight_symbol: String,
-#[builder(default)]
-pub toggled: bool,
+    pub state: ListState,
+    #[builder(default)]
+    pub highlight_symbol: String,
+    #[builder(default)]
+    pub toggled: bool,
 }
 
 impl SelectableList {
     pub fn render(&mut self, area: Rect, f: &mut Frame, block_title: &str) {
         let list_items: Vec<ListItem> = self
-        .items
-        .iter()
-        .enumerate()
-        .map(|(i, item)| {
-            let mut style = item
-            .style
-            .unwrap_or_else(|| Style::default().fg(Color::White));
+            .items
+            .iter()
+            .enumerate()
+            .map(|(i, item)| {
+                let mut style = item
+                    .style
+                    .unwrap_or_else(|| Style::default().fg(Color::White));
 
-            if Some(i) == self.selected_index() {
-                style = style
-                .bg(Color::Gray)
-                .fg(Color::Black)
-                .add_modifier(Modifier::BOLD);
-            }
-
-            let label = {
-                let mut parts = Vec::new();
-
-                if self.toggled {
-                    parts.push(if item.toggle { "[x]" } else { "[ ]" }.to_string());
+                if Some(i) == self.selected_index() {
+                    style = style
+                        .bg(Color::Gray)
+                        .fg(Color::Black)
+                        .add_modifier(Modifier::BOLD);
                 }
 
-                if let Some(icon) = &item.icon {
-                    parts.push(icon.to_string());
-                }
+                let label = {
+                    let mut parts = Vec::new();
 
-                parts.push(item.label.clone());
-                parts.join(" ")
-            };
+                    if self.toggled {
+                        parts.push(if item.toggle { "[x]" } else { "[ ]" }.to_string());
+                    }
 
-            ListItem::new(label).style(style)
-        })
-        .collect();
+                    if let Some(icon) = &item.icon {
+                        parts.push(icon.to_string());
+                    }
+
+                    parts.push(item.label.clone());
+                    parts.join(" ")
+                };
+
+                ListItem::new(label).style(style)
+            })
+            .collect();
 
         let block = Block::default().title(block_title).borders(Borders::ALL);
 
         let list = List::new(list_items)
-        .block(block)
-        .highlight_symbol(&self.highlight_symbol);
+            .block(block)
+            .highlight_symbol(&self.highlight_symbol);
 
         f.render_stateful_widget(list, area, &mut self.state);
     }
