@@ -28,10 +28,10 @@ pub struct SelectableList {
     #[builder(default)]
     pub items: Vec<ListItemEntry>,
     #[builder(default = "{
-    let mut s = ListState::default();
-    s.select(Some(0));
-    s
-}")]
+        let mut s = ListState::default();
+        s.select(Some(0));
+        s
+    }")]
     pub state: ListState,
     #[builder(default)]
     pub highlight_symbol: String,
