@@ -5,14 +5,12 @@
  */
 
 use derive_builder::Builder;
-use ratatui::{
-    Frame,
-    layout::Rect,
-    style::{Color, Modifier, Style},
-    widgets::{Block, Borders, List, ListItem, ListState},
-};
+use ratatui::Frame;
+use ratatui::layout::Rect;
+use ratatui::style::{Color, Modifier, Style};
+use ratatui::widgets::{Block, Borders, List, ListItem, ListState};
 
-#[derive(Builder, Clone, Default, Debug)]
+#[derive(Builder, Clone, Default)]
 pub struct ListItemEntry {
     pub label: String,
     #[builder(default, setter(strip_option))]
@@ -33,7 +31,7 @@ pub struct SelectableList {
         s
     }")]
     pub state: ListState,
-    #[builder(default)]
+    #[builder(setter(custom))]
     pub highlight_symbol: String,
     #[builder(default)]
     pub toggled: bool,
@@ -46,15 +44,10 @@ impl SelectableList {
             .iter()
             .enumerate()
             .map(|(i, item)| {
-                let mut style = item
-                    .style
-                    .unwrap_or_else(|| Style::default().fg(Color::White));
+                let mut style = item.style.unwrap_or_else(|| Style::default().fg(Color::White));
 
                 if Some(i) == self.selected_index() {
-                    style = style
-                        .bg(Color::Gray)
-                        .fg(Color::Black)
-                        .add_modifier(Modifier::BOLD);
+                    style = style.bg(Color::Gray).fg(Color::Black).add_modifier(Modifier::BOLD);
                 }
 
                 let label = {
@@ -78,9 +71,7 @@ impl SelectableList {
 
         let block = Block::default().title(block_title).borders(Borders::ALL);
 
-        let list = List::new(list_items)
-            .block(block)
-            .highlight_symbol(&self.highlight_symbol);
+        let list = List::new(list_items).block(block).highlight_symbol(&self.highlight_symbol);
 
         f.render_stateful_widget(list, area, &mut self.state);
     }
@@ -118,8 +109,16 @@ impl SelectableList {
             }
         }
     }
+
     pub fn checked_items(&self) -> Vec<&ListItemEntry> {
         self.items.iter().filter(|item| item.toggle).collect()
+    }
+}
+
+impl SelectableListBuilder {
+    pub fn highlight_symbol(&mut self, s: impl Into<String>) -> &mut Self {
+        self.highlight_symbol = Some(format!("{} ", s.into().trim_end()));
+        self
     }
 }
 
