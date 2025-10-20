@@ -2,24 +2,30 @@
     SPDX-License-Identifier: AGPL-3.0-or-later
     SPDX-FileCopyrightText: 2025 Shomy
 */
-use crate::app::{AppCtx, AppPage};
-use crate::pages::Page;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+
 use hex::encode;
 use penumbra::core::device::DeviceInfo;
 use penumbra::core::seccfg::LockFlag;
 use penumbra::{Device, find_mtk_port};
+use ratatui::Frame;
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
-use ratatui::{
-    Frame,
-    layout::{Constraint, Direction, Layout},
-    style::{Color, Style},
-    widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
-};
-use strum_macros::{AsRefStr, EnumIter};
+use ratatui::layout::{Constraint, Direction, Layout};
+use ratatui::style::{Color, Style};
+use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph};
 use strum::IntoEnumIterator;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
+use strum_macros::{AsRefStr, EnumIter};
 use tokio::sync::Mutex;
+
+use crate::app::{AppCtx, AppPage};
+use crate::components::selectable_list::{
+    ListItemEntry,
+    ListItemEntryBuilder,
+    SelectableList,
+    SelectableListBuilder,
+};
+use crate::pages::Page;
 
 #[derive(Clone, PartialEq, Default)]
 enum DeviceStatus {
@@ -41,7 +47,7 @@ enum DeviceAction {
 }
 
 pub struct DevicePage {
-    actions_state: ListState,
+    menu: SelectableList,
     actions: Vec<DeviceAction>,
     device: Option<Arc<Mutex<Device<'static>>>>,
     status: DeviceStatus,
@@ -52,11 +58,29 @@ pub struct DevicePage {
 
 impl DevicePage {
     pub fn new() -> Self {
-        let mut actions_state = ListState::default();
-        actions_state.select(Some(0));
+        let actions: Vec<DeviceAction> = DeviceAction::iter().collect();
+        let menu_items: Vec<ListItemEntry> = actions
+            .iter()
+            .map(|action| {
+                let icon = match action {
+                    DeviceAction::UnlockBootloader => '🔓',
+                    DeviceAction::LockBootloader => '🔒',
+                    DeviceAction::BackToMenu => '❌',
+                };
+                let label = action.as_ref().to_string();
+
+                ListItemEntryBuilder::new(label).icon(icon).build().unwrap()
+            })
+            .collect();
+        let menu: SelectableList = SelectableListBuilder::default()
+            .items(menu_items)
+            .highlight_symbol(">>".to_string())
+            .build()
+            .unwrap();
+
         Self {
-            actions_state,
-            actions: DeviceAction::iter().collect(),
+            menu,
+            actions,
             device: None,
             status: DeviceStatus::default(),
             status_message: None,
@@ -119,50 +143,31 @@ impl DevicePage {
 impl Page for DevicePage {
     async fn handle_input(&mut self, ctx: &mut AppCtx, key: KeyEvent) {
         match key.code {
-            KeyCode::Up => {
-                let selected = self.actions_state.selected().unwrap_or(0);
-                let new = if selected == 0 {
-                    self.actions.len() - 1
-                } else {
-                    selected - 1
-                };
-                self.actions_state.select(Some(new));
-            }
-            KeyCode::Down => {
-                let selected = self.actions_state.selected().unwrap_or(0);
-                let new = if selected + 1 == self.actions.len() {
-                    0
-                } else {
-                    selected + 1
-                };
-                self.actions_state.select(Some(new));
-            }
+            KeyCode::Up => self.menu.previous(),
+            KeyCode::Down => self.menu.next(),
             KeyCode::Enter => {
-                let idx = self.actions_state.selected().unwrap_or(0);
-                match idx {
-                    0 | 1 => {
-                        let flag = if idx == 0 {
-                            LockFlag::Unlock
-                        } else {
-                            LockFlag::Lock
+                let action = self.actions[self.menu.selected_index().unwrap_or(2)];
+                match action {
+                    DeviceAction::UnlockBootloader | DeviceAction::LockBootloader => {
+                        let (label, flag) = match action {
+                            DeviceAction::UnlockBootloader => ("Unlock", LockFlag::Unlock),
+                            DeviceAction::LockBootloader => ("Lock", LockFlag::Lock),
+                            _ => unreachable!(),
                         };
-                        let action = if idx == 0 { "Unlock" } else { "Lock" };
 
                         match self.set_device_lock_state(flag).await {
                             Ok(_) => {
                                 self.status_message = Some((
-                                    format!("{} done.", action),
+                                    format!("{label} done."),
                                     Style::default().fg(Color::Green).bg(Color::Black),
                                 ));
                             }
                             Err(e) => {
-                                self.status =
-                                    DeviceStatus::Error(format!("{} failed: {}", action, e));
+                                self.status = DeviceStatus::Error(format!("{label} failed: {e}"));
                             }
                         }
                     }
-                    2 => ctx.change_page(AppPage::Welcome),
-                    _ => {}
+                    DeviceAction::BackToMenu => ctx.change_page(AppPage::Welcome),
                 }
             }
             _ => {}
@@ -172,11 +177,7 @@ impl Page for DevicePage {
     fn render(&mut self, frame: &mut Frame<'_>, _ctx: &mut AppCtx) {
         let layout = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(10),
-                Constraint::Length(6),
-                Constraint::Min(5),
-            ])
+            .constraints([Constraint::Length(10), Constraint::Length(6), Constraint::Min(5)])
             .split(frame.area());
 
         let (status_line, style) = match &self.status {
@@ -188,14 +189,12 @@ impl Page for DevicePage {
                 "Initializing device...".to_string(),
                 Style::default().fg(Color::Cyan).bg(Color::Black),
             ),
-            DeviceStatus::DAReady => (
-                "DA mode active.".to_string(),
-                Style::default().fg(Color::Green).bg(Color::Black),
-            ),
-            DeviceStatus::Error(msg) => (
-                format!("Error: {msg}"),
-                Style::default().fg(Color::Red).bg(Color::Black),
-            ),
+            DeviceStatus::DAReady => {
+                ("DA mode active.".to_string(), Style::default().fg(Color::Green).bg(Color::Black))
+            }
+            DeviceStatus::Error(msg) => {
+                (format!("Error: {msg}"), Style::default().fg(Color::Red).bg(Color::Black))
+            }
         };
 
         let mut status_lines = vec![status_line];
@@ -228,23 +227,11 @@ impl Page for DevicePage {
             layout[1],
         );
 
-        let actions = self
-            .actions
-            .iter()
-            .map(|action| ListItem::new(action.as_ref()))
-            .collect::<Vec<_>>();
-
-        frame.render_stateful_widget(
-            List::new(actions)
-                .block(Block::default().title("Actions").borders(Borders::ALL))
-                .highlight_style(Style::default().bg(Color::Blue).fg(Color::White)),
-            layout[2],
-            &mut self.actions_state,
-        );
+        self.menu.render(layout[2], frame, "Actions");
     }
 
     async fn on_enter(&mut self, _ctx: &mut AppCtx) {
-        self.actions_state.select(Some(0));
+        self.menu.state.select(Some(0));
         self.status = DeviceStatus::WaitingForDevice;
         self.last_poll = Instant::now();
         self.device = None;

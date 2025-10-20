@@ -2,17 +2,25 @@
     SPDX-License-Identifier: AGPL-3.0-or-later
     SPDX-FileCopyrightText: 2025 Shomy
 */
-use crate::app::{AppCtx, AppPage};
-use crate::pages::Page;
+use std::fs;
+
 use penumbra::da::DAFile;
 use ratatui::crossterm::event::{Event, KeyCode, KeyEvent};
-use ratatui::{prelude::*, widgets::*};
+use ratatui::prelude::*;
+use ratatui::widgets::*;
 use ratatui_explorer::{FileExplorer, Theme};
 use strum::IntoEnumIterator;
 use strum_macros::{AsRefStr, EnumIter};
-use std::{fs};
 
 use super::LOGO;
+use crate::app::{AppCtx, AppPage};
+use crate::components::selectable_list::{
+    ListItemEntry,
+    ListItemEntryBuilder,
+    SelectableList,
+    SelectableListBuilder,
+};
+use crate::pages::Page;
 
 #[derive(EnumIter, AsRefStr, Debug, Clone, Copy)]
 enum MenuAction {
@@ -34,17 +42,32 @@ enum WelcomeState {
 pub struct WelcomePage {
     state: WelcomeState,
     actions: Vec<MenuAction>,
-    selected_idx: usize,
+    menu: SelectableList,
 }
 
 impl WelcomePage {
     pub fn new() -> Self {
         let actions: Vec<MenuAction> = MenuAction::iter().collect();
+        let menu_items: Vec<ListItemEntry> = actions
+            .iter()
+            .map(|action| {
+                let icon = match action {
+                    MenuAction::SelectDa => '🔍',
+                    MenuAction::EnterDaMode => '🚀',
+                    MenuAction::Quit => '❌',
+                };
+                let label = action.as_ref().to_string();
 
-        Self {
-            actions,
-            ..Default::default()
-        }
+                ListItemEntryBuilder::new(label).icon(icon).build().unwrap()
+            })
+            .collect();
+        let menu: SelectableList = SelectableListBuilder::default()
+            .items(menu_items)
+            .highlight_symbol(">>".to_string())
+            .build()
+            .unwrap();
+
+        Self { actions, menu, ..Default::default() }
     }
 }
 
@@ -68,10 +91,10 @@ impl Page for WelcomePage {
         f.render_widget(logo, vertical_chunks[0]);
 
         // Loader info (show filename or None)
-        let loader_text = ctx.loader()
+        let loader_text = ctx
+            .loader()
             .map(|_| format!("Selected Loader: {}", ctx.loader_name()))
             .unwrap_or_else(|| "Selected Loader: None".to_string());
-
 
         let loader_paragraph = Paragraph::new(loader_text)
             .style(Style::default().fg(Color::Yellow))
@@ -85,18 +108,7 @@ impl Page for WelcomePage {
             .split(vertical_chunks[2]);
 
         // Menu
-        let block = Block::default().title("Menu").borders(Borders::ALL);
-        let items: Vec<ListItem> = self.actions
-            .iter()
-            .map(|action| ListItem::new(action.as_ref()))
-            .collect();
-        let mut list_state = ListState::default();
-        list_state.select(Some(self.selected_idx));
-        let menu_list = List::new(items)
-            .block(block)
-            .highlight_style(Style::default().bg(Color::Gray).fg(Color::Black))
-            .highlight_symbol(">> ");
-        f.render_stateful_widget(menu_list, horizontal_chunks[0], &mut list_state);
+        self.menu.render(horizontal_chunks[0], f, "Menu");
 
         // File explorer
         if let WelcomeState::Browsing(explorer) = &mut self.state {
@@ -141,18 +153,10 @@ impl Page for WelcomePage {
             }
 
             WelcomeState::Idle => match key.code {
-                KeyCode::Up => {
-                    if self.selected_idx > 0 {
-                        self.selected_idx -= 1;
-                    }
-                }
-                KeyCode::Down => {
-                    if self.selected_idx < self.actions.len() - 1 {
-                        self.selected_idx += 1;
-                    }
-                }
+                KeyCode::Up => self.menu.previous(),
+                KeyCode::Down => self.menu.next(),
                 KeyCode::Enter => {
-                    let action = self.actions[self.selected_idx];
+                    let action = self.actions[self.menu.selected_index().unwrap_or(2)];
                     match action {
                         MenuAction::SelectDa => {
                             let theme = Theme::default().add_default_title();
@@ -166,7 +170,7 @@ impl Page for WelcomePage {
                             }
                         }
                         MenuAction::EnterDaMode => ctx.change_page(AppPage::DevicePage),
-                        MenuAction::Quit => ctx.quit()
+                        MenuAction::Quit => ctx.quit(),
                     }
                 }
                 _ => {}
