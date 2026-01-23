@@ -171,10 +171,10 @@ impl MTKPort for UsbMTKPort {
         self.ctrl_interface = Some(ctrl_iface);
 
         // CDC setup is needed for preloader and DA modes on all platforms
-        if self.connection_type != ConnectionType::Brom {
-            if let Err(e) = self.setup_cdc().await {
-                debug!("CDC setup failed (may be ok): {:?}", e);
-            }
+        if self.connection_type != ConnectionType::Brom
+            && let Err(e) = self.setup_cdc().await
+        {
+            debug!("CDC setup failed (may be ok): {:?}", e);
         }
 
         self.is_open = true;

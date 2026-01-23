@@ -216,10 +216,10 @@ impl MTKPort for UsbMTKPort {
         .map_err(|_| Error::io("USB open task failed"))?;
 
         // CDC setup is needed for preloader and DA modes
-        if self.connection_type != ConnectionType::Brom {
-            if let Err(e) = self.setup_cdc().await {
-                debug!("CDC Setup failed (may be ok): {:?}", e);
-            }
+        if self.connection_type != ConnectionType::Brom
+            && let Err(e) = self.setup_cdc().await
+        {
+            debug!("CDC Setup failed (may be ok): {:?}", e);
         }
 
         self.is_open = true;
