@@ -5,7 +5,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use log::{error, info};
+use log::{debug, error, info};
 use rusb::{Context, Device, DeviceHandle, Direction, Recipient, RequestType, UsbContext};
 use tokio::sync::Mutex;
 use tokio::task::spawn_blocking;
@@ -215,10 +215,10 @@ impl MTKPort for UsbMTKPort {
         .await
         .map_err(|_| Error::io("USB open task failed"))?;
 
-        #[cfg(target_os = "windows")]
-        {
-            if let Err(_) = self.setup_cdc().await {
-                log::debug!("Windows CDC Setup failed!!");
+        // CDC setup is needed for preloader and DA modes
+        if self.connection_type != ConnectionType::Brom {
+            if let Err(e) = self.setup_cdc().await {
+                debug!("CDC Setup failed (may be ok): {:?}", e);
             }
         }
 
@@ -309,7 +309,7 @@ impl MTKPort for UsbMTKPort {
                 let locked = handle.blocking_lock();
                 match locked.read_bulk(endpoint, &mut response, timeout) {
                     Ok(count) => Ok((response, count)),
-                    Err(_) => Err(Error::io("Bulk read failed")),
+                    Err(e) => Err(Error::io(format!("Bulk read failed: {:?}", e))),
                 }
             })
             .await

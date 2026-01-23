@@ -7,6 +7,7 @@ use std::fmt;
 use std::time::Duration;
 
 use async_trait::async_trait;
+use log::debug;
 use nusb::descriptors::TransferType;
 use nusb::io::{EndpointRead, EndpointWrite};
 use nusb::transfer::{Bulk, ControlIn, ControlOut, ControlType, Direction, In, Out, Recipient};
@@ -95,7 +96,6 @@ impl UsbMTKPort {
         Err(Error::io("No bulk endpoints found"))
     }
 
-    #[cfg(windows)]
     async fn setup_cdc(&self) -> Result<()> {
         let iface = self.ctrl_interface.as_ref().ok_or(Error::io("Interface not open"))?;
 
@@ -135,7 +135,7 @@ impl UsbMTKPort {
             .await
             .map_err(|e| Error::io(format!("CDC Set Control Line State failed: {}", e)))?;
 
-        log::debug!("CDC Setup complete");
+        debug!("CDC Setup complete");
         Ok(())
     }
 }
@@ -170,8 +170,12 @@ impl MTKPort for UsbMTKPort {
         self.interface = Some(iface);
         self.ctrl_interface = Some(ctrl_iface);
 
-        #[cfg(windows)]
-        self.setup_cdc().await?;
+        // CDC setup is needed for preloader and DA modes on all platforms
+        if self.connection_type != ConnectionType::Brom {
+            if let Err(e) = self.setup_cdc().await {
+                debug!("CDC setup failed (may be ok): {:?}", e);
+            }
+        }
 
         self.is_open = true;
 
