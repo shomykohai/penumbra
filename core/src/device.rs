@@ -47,6 +47,8 @@ pub struct DeviceBuilder {
     /// If provided, it can be used to extract EMI settings or other information.
     /// Only needed if told to do so, like when the device is in BROM mode.
     preloader_data: Option<Vec<u8>>,
+    /// Whether to enable verbose logging.
+    verbose: bool,
 }
 
 impl DeviceBuilder {
@@ -68,6 +70,12 @@ impl DeviceBuilder {
         self
     }
 
+    /// Enables verbose logging mode.
+    pub fn with_verbose(mut self, verbose: bool) -> Self {
+        self.verbose = verbose;
+        self
+    }
+
     /// Builds and returns a new `Device` instance.
     pub fn build(self) -> Result<Device> {
         let connection = self.mtk_port.map(Connection::new);
@@ -83,6 +91,7 @@ impl DeviceBuilder {
             connected: false,
             da_data: self.da_data,
             preloader_data: self.preloader_data,
+            verbose: self.verbose,
         })
     }
 }
@@ -111,6 +120,8 @@ pub struct Device {
     da_data: Option<Vec<u8>>,
     /// Preloader data, if provided.
     preloader_data: Option<Vec<u8>>,
+    /// Whether verbose logging is enabled.
+    verbose: bool,
 }
 
 impl Device {
@@ -269,9 +280,9 @@ impl Device {
 
         let protocol: Box<dyn DAProtocol + Send> = match da.da_type {
             DAType::V5 => {
-                Box::new(XFlash::new(conn, da, self.dev_info.clone(), self.preloader_data.clone()))
+                Box::new(XFlash::new(conn, da, self.dev_info.clone(), self.preloader_data.clone(), self.verbose))
             }
-            DAType::V6 => Box::new(Xml::new(conn, da, self.dev_info.clone())),
+            DAType::V6 => Box::new(Xml::new(conn, da, self.dev_info.clone(), self.verbose)),
             _ => return Err(Error::penumbra("Unsupported DA type")),
         };
 

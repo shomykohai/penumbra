@@ -116,7 +116,9 @@ pub async fn run_cli(args: &CliArgs) -> Result<()> {
         }
     };
 
-    let mut builder = DeviceBuilder::default().with_mtk_port(mtk_port);
+    let mut builder = DeviceBuilder::default()
+        .with_mtk_port(mtk_port)
+        .with_verbose(args.verbose);
 
     builder = if let Some(da) = da_data {
         builder.with_da_data(da)

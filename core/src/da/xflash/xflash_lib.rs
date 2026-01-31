@@ -27,6 +27,7 @@ pub struct XFlash {
     pub(super) read_packet_length: Option<usize>,
     pub(super) write_packet_length: Option<usize>,
     pub(super) patch: bool,
+    pub(super) verbose: bool,
 }
 
 impl XFlash {
@@ -36,7 +37,7 @@ impl XFlash {
         self.send(&cmd_bytes[..]).await
     }
 
-    pub fn new(conn: Connection, da: DA, dev_info: DeviceInfo, pl: Option<Vec<u8>>) -> Self {
+    pub fn new(conn: Connection, da: DA, dev_info: DeviceInfo, pl: Option<Vec<u8>>, verbose: bool) -> Self {
         XFlash {
             conn,
             da,
@@ -46,6 +47,7 @@ impl XFlash {
             read_packet_length: None,
             write_packet_length: None,
             patch: true,
+            verbose,
         }
     }
 
@@ -117,9 +119,11 @@ impl XFlash {
         self.conn.port.write_all(&hdr).await?;
         self.conn.port.write_all(&(Cmd::SyncSignal as u32).to_le_bytes()).await?;
 
+        let da_log_level: u32 = if self.verbose { 1 } else { 2 };
+
         let mut env_param = Vec::new();
-        env_param.extend_from_slice(&2u32.to_le_bytes()); // da_log_level = 2 (UART)
-        env_param.extend_from_slice(&1u32.to_le_bytes()); // log_channel = 1
+        env_param.extend_from_slice(&da_log_level.to_le_bytes()); // da_log_level
+        env_param.extend_from_slice(&1u32.to_le_bytes()); // log_channel = 1 (UART)
         env_param.extend_from_slice(&1u32.to_le_bytes()); // system_os = 1 (OS_LINUX)
         env_param.extend_from_slice(&0u32.to_le_bytes()); // ufs_provision = 0
         env_param.extend_from_slice(&0u32.to_le_bytes()); // ...

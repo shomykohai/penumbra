@@ -48,10 +48,11 @@ pub struct Xml {
     pub(super) read_packet_length: Option<usize>,
     pub(super) write_packet_length: Option<usize>,
     pub(super) patch: bool,
+    pub(super) verbose: bool,
 }
 
 impl Xml {
-    pub fn new(conn: Connection, da: DA, dev_info: DeviceInfo) -> Self {
+    pub fn new(conn: Connection, da: DA, dev_info: DeviceInfo, verbose: bool) -> Self {
         Xml {
             conn,
             da,
@@ -60,6 +61,7 @@ impl Xml {
             read_packet_length: None,
             write_packet_length: None,
             patch: true,
+            verbose,
         }
     }
 
@@ -397,12 +399,14 @@ impl Xml {
         info!("[Penumbra] Sent XML DA1, jumping to address 0x{:08X}...", addr);
         self.conn.jump_da(addr).await?;
 
+        let log_level = if self.verbose { "DEBUG" } else { "INFO" };
+
         xmlcmd_e!(
             self,
             SetRuntimeParameter,
             "NONE",
             "AUTO-DETECT",
-            "INFO",
+            log_level,
             "UART",
             "LINUX",
             "YES"
