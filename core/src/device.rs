@@ -279,9 +279,13 @@ impl Device {
         })?;
 
         let protocol: Box<dyn DAProtocol + Send> = match da.da_type {
-            DAType::V5 => {
-                Box::new(XFlash::new(conn, da, self.dev_info.clone(), self.preloader_data.clone(), self.verbose))
-            }
+            DAType::V5 => Box::new(XFlash::new(
+                conn,
+                da,
+                self.dev_info.clone(),
+                self.preloader_data.clone(),
+                self.verbose,
+            )),
             DAType::V6 => Box::new(Xml::new(conn, da, self.dev_info.clone(), self.verbose)),
             _ => return Err(Error::penumbra("Unsupported DA type")),
         };

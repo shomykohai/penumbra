@@ -37,7 +37,13 @@ impl XFlash {
         self.send(&cmd_bytes[..]).await
     }
 
-    pub fn new(conn: Connection, da: DA, dev_info: DeviceInfo, pl: Option<Vec<u8>>, verbose: bool) -> Self {
+    pub fn new(
+        conn: Connection,
+        da: DA,
+        dev_info: DeviceInfo,
+        pl: Option<Vec<u8>>,
+        verbose: bool,
+    ) -> Self {
         XFlash {
             conn,
             da,
