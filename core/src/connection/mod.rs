@@ -197,7 +197,25 @@ impl Connection {
     }
 
     pub async fn get_meid(&mut self) -> Result<Vec<u8>> {
-        self.echo(&[Command::GetMeId as u8], 1).await?;
+        self.port.write_all(&[Command::GetMeId as u8]).await?;
+
+        let mut echo = [0u8; 1];
+        self.port.read_exact(&mut echo).await?;
+
+        // IQO Preloader seems to have a custom security gate that blocks most commands
+        // behind an OEM authentication challenge (0x90/0x91). Only a small whitelist of
+        // commands (GET_HW_CODE, GET_HW_SW_VER, GET_SOC_ID, and the OEM commands) are
+        // allowed before authentication. Blocked commands receive 0xDC instead of an echo.
+        if echo[0] == 0xDC {
+            return Err(Error::conn(
+                "Command blocked by Preloader security. \
+                This device requires OEM authentication before commands can be executed.",
+            ));
+        }
+
+        if echo[0] != Command::GetMeId as u8 {
+            return Err(Error::conn("Data mismatch"));
+        }
 
         let mut length_bytes = [0u8; 4];
 
