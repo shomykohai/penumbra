@@ -125,7 +125,17 @@ impl XFlash {
         self.conn.port.write_all(&hdr).await?;
         self.conn.port.write_all(&(Cmd::SyncSignal as u32).to_le_bytes()).await?;
 
-        let da_log_level: u32 = if self.verbose { 1 } else { 2 };
+        /// We can only set the environment parameters once, and for whatever reason if we set the
+        /// log level to DEBUG and try to send EMI settings in BROM mode, the DA hangs. This
+        /// appears to be a MediaTek quirk as usual. As a workaround, we always use INFO
+        /// level when in BROM mode, even if verbose logging is requested.
+        let da_log_level: u32 = if self.verbose
+            && self.conn.connection_type != crate::connection::port::ConnectionType::Brom
+        {
+            1 // DEBUG
+        } else {
+            2 // INFO
+        };
 
         let mut env_param = Vec::new();
         env_param.extend_from_slice(&da_log_level.to_le_bytes()); // da_log_level
