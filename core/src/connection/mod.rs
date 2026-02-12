@@ -283,28 +283,31 @@ impl Connection {
 
     /// Reads memory from the device with size, split into 4-byte chunks.
     pub async fn read32(&mut self, address: u32, size: usize) -> Result<Vec<u8>> {
+        let aligned = size.div_ceil(4) * 4;
+
         self.echo(&[Command::Read32 as u8], 1).await?;
-        self.echo(&address.to_le_bytes(), 4).await?;
-        self.echo(&(size as u32).to_le_bytes(), 4).await?;
+        self.echo(&address.to_be_bytes(), 4).await?;
+        self.echo(&((aligned / 4) as u32).to_be_bytes(), 4).await?;
+
         let mut status_bytes = [0u8; 2];
         self.port.read_exact(&mut status_bytes).await?;
-        let status = u16::from_le_bytes(status_bytes);
-
+        let status = u16::from_be_bytes(status_bytes);
         if status != 0 {
             return Err(Error::conn(format!("Read32 failed with status: 0x{:04X}", status)));
         }
 
-        let mut data = vec![0u8; size];
+        let mut data = vec![0u8; aligned];
         for chunk in data.chunks_mut(4) {
             self.port.read_exact(chunk).await?;
         }
 
         self.port.read_exact(&mut status_bytes).await?;
-        let status = u16::from_le_bytes(status_bytes);
+        let status = u16::from_be_bytes(status_bytes);
         if status != 0 {
             return Err(Error::conn(format!("Read32 failed with status: 0x{:04X}", status)));
         }
 
+        data.truncate(size);
         Ok(data)
     }
 }
