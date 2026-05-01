@@ -62,6 +62,7 @@ cli_commands! {
         WriteOffset(WriteOffArgs),
         ReadOffset(ReadOffArgs),
         Erase(EraseArgs),
+        WriteAll(WriteAllArgs),
         ReadAll(ReadAllArgs),
         Seccfg(SeccfgArgs),
         Pgpt(PgptArgs),
