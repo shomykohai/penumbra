@@ -47,7 +47,8 @@ pub fn patch_da(xflash: &mut XFlash) -> Result<DA> {
 
 /// Patches only DA1, specific for V5 DA
 pub fn patch_da1(xflash: &mut XFlash) -> Result<DAEntryRegion> {
-    let da1 = xflash.da.get_da1().cloned().unwrap();
+    let mut da1 = xflash.da.get_da1().cloned().unwrap();
+    patch_anti_rollback(&mut da1, "DA1")?;
     Ok(da1)
 }
 
@@ -66,7 +67,22 @@ pub fn patch_da2(xflash: &mut XFlash) -> Result<DAEntryRegion> {
 fn patch_security(da: &mut DAEntryRegion, analyzer: &Thumb2Analyzer) -> Result<bool> {
     patch_lock_state(da, analyzer)?;
     patch_sec_policy(da, analyzer)?;
+    patch_anti_rollback(da, "DA2")?;
     patch_da_sla(da, analyzer)
+}
+
+/// Disables the DA version anti-rollback check by overwriting the
+/// 0xC0020053 error constant in the DA's literal pool with 0, so the
+/// error-return path returns success and older DA versions are accepted.
+fn patch_anti_rollback(da: &mut DAEntryRegion, label: &str) -> Result<bool> {
+    let pos = find_pattern(&da.data, "530002C0", 0);
+    if pos == HEX_NOT_FOUND {
+        return Ok(false);
+    }
+
+    patch(&mut da.data, pos, "00000000")?;
+    info!("Patched {label} version anti-rollback.");
+    Ok(true)
 }
 
 fn patch_lock_state(da: &mut DAEntryRegion, analyzer: &Thumb2Analyzer) -> Result<bool> {
