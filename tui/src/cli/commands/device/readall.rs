@@ -19,9 +19,9 @@ use crate::cli::state::PersistedDeviceState;
 
 #[derive(Args, Debug)]
 pub struct ReadAllArgs {
-    /// The partition to read
+    /// The directory where the read partitions will be saved
     pub output_dir: PathBuf,
-    /// The destination file
+    /// What to skip
     #[arg(long, short = 's', value_delimiter = ',')]
     pub skip: Vec<String>,
 }
