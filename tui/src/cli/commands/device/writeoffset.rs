@@ -3,7 +3,7 @@
     SPDX-FileCopyrightText: 2026 Shomy
 */
 use std::fs::File;
-use std::io::{BufReader, Write};
+use std::io::BufReader;
 use std::path::PathBuf;
 
 use anyhow::Result;
