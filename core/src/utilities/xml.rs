@@ -42,3 +42,16 @@ pub fn get_tag_usize(xml: &str, path: &str) -> Result<usize> {
     usize::from_str_radix(trimmed, 16)
         .map_err(|_| Error::penumbra(format!("Failed to parse hex XML tag `{}`", path)))
 }
+
+/// Like [`get_tag_usize`], but always parses into a `u64`.
+///
+/// Storage capacity values (e.g. eMMC/UFS partition sizes) routinely exceed
+/// `u32::MAX` and must not be parsed as `usize` on 32-bit targets.
+pub fn get_tag_u64(xml: &str, path: &str) -> Result<u64> {
+    let raw_value: String = get_tag(xml, path)?;
+
+    let trimmed = raw_value.trim_start_matches("0x");
+
+    u64::from_str_radix(trimmed, 16)
+        .map_err(|_| Error::penumbra(format!("Failed to parse hex XML tag `{}`", path)))
+}

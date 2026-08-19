@@ -6,7 +6,7 @@ use wincode::{Deserialize, SchemaRead, SchemaWrite};
 
 use crate::core::storage::{PartitionKind, Storage, StorageType};
 use crate::error::{Error, Result};
-use crate::utilities::xml::{get_tag, get_tag_usize};
+use crate::utilities::xml::{get_tag, get_tag_u64, get_tag_usize};
 
 #[repr(C)]
 #[derive(Debug, SchemaRead, SchemaWrite, Clone)]
@@ -130,10 +130,10 @@ impl UfsStorage {
 
     pub fn from_xml_response(xml: &str) -> Result<Self> {
         let block_size = get_tag_usize(xml, "ufs/block_size")? as u32;
-        let lu0_size = get_tag_usize(xml, "ufs/lua0_size")? as u64;
-        let lu1_size = get_tag_usize(xml, "ufs/lua1_size")? as u64;
-        let lu2_size = get_tag_usize(xml, "ufs/lua2_size")? as u64;
-        let lu3_size = get_tag_usize(xml, "ufs/lua3_size").unwrap_or(0) as u64;
+        let lu0_size = get_tag_u64(xml, "ufs/lua0_size")?;
+        let lu1_size = get_tag_u64(xml, "ufs/lua1_size")?;
+        let lu2_size = get_tag_u64(xml, "ufs/lua2_size")?;
+        let lu3_size = get_tag_u64(xml, "ufs/lua3_size").unwrap_or(0);
 
         // Older devices use ufs_cid, newer ones use id
         let cid_str: String = get_tag(xml, "ufs/ufs_cid").or_else(|_| get_tag(xml, "ufs/id"))?;

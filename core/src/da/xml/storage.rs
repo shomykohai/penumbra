@@ -23,14 +23,16 @@ pub fn detect_storage(xml: &mut Xml) -> Option<StorageKind> {
     match storage_str.as_str() {
         "EMMC" => {
             debug!("eMMC storage detected.");
-            if let Ok(storage) = EmmcStorage::from_xml_response(&reponse) {
-                return Some(StorageKind::Emmc(storage));
+            match EmmcStorage::from_xml_response(&reponse) {
+                Ok(storage) => return Some(StorageKind::Emmc(storage)),
+                Err(e) => debug!("Failed to parse eMMC HW-INFO response: {e}\n{reponse}"),
             }
         }
         "UFS" => {
             debug!("UFS storage detected.");
-            if let Ok(storage) = UfsStorage::from_xml_response(&reponse) {
-                return Some(StorageKind::Ufs(storage));
+            match UfsStorage::from_xml_response(&reponse) {
+                Ok(storage) => return Some(StorageKind::Ufs(storage)),
+                Err(e) => debug!("Failed to parse UFS HW-INFO response: {e}\n{reponse}"),
             }
         }
         _ => {}
