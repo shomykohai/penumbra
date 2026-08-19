@@ -54,7 +54,7 @@ impl DeviceCommand for EraseArgs {
             Ok(_) => {}
             Err(e) => {
                 pb.abandon("Erase failed!");
-                return Err(e)?;
+                Err(e)?;
             }
         };
 

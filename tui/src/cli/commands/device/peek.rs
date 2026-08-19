@@ -62,7 +62,7 @@ impl DeviceCommand for PeekArgs {
             Ok(_) => {}
             Err(e) => {
                 pb.abandon("Read failed!");
-                return Err(e)?;
+                Err(e)?;
             }
         }
 

@@ -69,7 +69,7 @@ impl DeviceCommand for PokeArgs {
             Ok(_) => {}
             Err(e) => {
                 pb.abandon("Write failed!");
-                return Err(e)?;
+                Err(e)?;
             }
         }
 

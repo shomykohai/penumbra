@@ -74,7 +74,7 @@ impl DeviceCommand for DownloadArgs {
             dev.download(&part.name, file_size as usize, &mut reader, &mut progress_callback)
         {
             pb.abandon("Download failed!");
-            return Err(e)?;
+            Err(e)?;
         }
 
         info!("Download to partition '{}' completed.", part.name);

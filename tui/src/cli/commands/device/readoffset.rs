@@ -70,7 +70,7 @@ impl DeviceCommand for ReadOffArgs {
             &mut progress_callback,
         ) {
             pb.abandon("Read failed!");
-            return Err(e)?;
+            Err(e)?;
         };
 
         writer.flush()?;

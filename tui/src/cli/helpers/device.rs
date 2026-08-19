@@ -63,11 +63,10 @@ pub async fn setup_device(args: &CliArgs, state: &mut PersistedDeviceState) -> R
         .with_verbose(args.verbose)
         .with_usb_log_channel(usb_log_channel);
 
-    if usb_log_channel {
-        if let Some(device_log) = setup_file_logger(DA_LOG_FILE).await {
+    if usb_log_channel
+        && let Some(device_log) = setup_file_logger(DA_LOG_FILE).await {
             builder = builder.with_device_log(device_log);
         }
-    }
 
     builder = if let Some(da) = da_data {
         builder.with_da_data(da)

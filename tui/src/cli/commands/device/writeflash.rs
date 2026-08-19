@@ -66,7 +66,7 @@ impl DeviceCommand for WriteArgs {
 
         if let Err(e) = dev.write_partition(&part.name, &mut reader, &mut progress_callback) {
             pb.abandon("Write failed!");
-            return Err(e)?;
+            Err(e)?;
         }
 
         info!("Flash write completed, {:#X} bytes written.", total_size);

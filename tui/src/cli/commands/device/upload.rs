@@ -64,7 +64,7 @@ impl DeviceCommand for UploadArgs {
             Ok(_) => {}
             Err(e) => {
                 pb.abandon("Upload failed!");
-                return Err(e)?;
+                Err(e)?;
             }
         };
 

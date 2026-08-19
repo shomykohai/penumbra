@@ -52,7 +52,7 @@ impl DeviceCommand for FormatArgs {
 
         if let Err(e) = dev.format(&part.name, &mut progress_callback) {
             pb.abandon("Format failed!");
-            return Err(e)?;
+            Err(e)?;
         }
 
         info!("Partition '{}' formatted.", part.name);

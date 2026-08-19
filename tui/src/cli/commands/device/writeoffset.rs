@@ -71,7 +71,7 @@ impl DeviceCommand for WriteOffArgs {
             &mut progress_callback,
         ) {
             pb.abandon("Write failed!");
-            return Err(e)?;
+            Err(e)?;
         };
 
         info!("Flash write completed, {:#X} bytes written.", self.length);
