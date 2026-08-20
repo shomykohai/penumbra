@@ -25,7 +25,7 @@ use crate::da::xml::{
     XmlCmdLifetime,
 };
 use crate::da::{NOOP_PROGRESS, ScatterFile, Xml};
-use crate::error::{PenumbraError, ProtocolError, XmlErrorKind};
+use crate::error::{PenumbraError, ProtocolError, XmlErrorKind, usize_checked};
 use crate::port::{MAX_TIMEOUT, MtkPort};
 use crate::storage::is_sparse;
 use crate::traits::{
@@ -286,7 +286,8 @@ where
             .to_owned()
     };
 
-    progress(0, total_bytes as usize);
+    let total = usize_checked(total_bytes)?;
+    progress(0, total);
 
     loop {
         let resp = xml.read_data(port)?;
@@ -313,7 +314,7 @@ where
         debug!("Received {} command.", cmd);
 
         let mut file_progress = |file_written: usize, _file_total: usize| {
-            progress((global_written + file_written as u64) as usize, total_bytes as usize);
+            progress(usize::try_from(global_written + file_written as u64).unwrap_or(total), total);
         };
 
         match cmd.as_str() {
@@ -376,13 +377,24 @@ where
                             if let Some(part) =
                                 parts.iter().find(|part| part.part.name == part_name)
                             {
-                                total_bytes += part.part.size as u64 * 2;
+                                total_bytes = total_bytes
+                                    .checked_add(
+                                        part.part
+                                            .size
+                                            .checked_mul(2)
+                                            .ok_or(PenumbraError::PartitionSizeOverflow)?,
+                                    )
+                                    .ok_or(PenumbraError::PartitionSizeOverflow)?;
                             }
                         }
 
                         rcd = Some(parsed_record);
 
-                        progress((global_written + bytes as u64) as usize, total_bytes as usize);
+                        progress(
+                            usize::try_from(global_written + bytes as u64)
+                                .map_err(|_| PenumbraError::PartitionSizeOverflow)?,
+                            usize_checked(total_bytes)?,
+                        );
                     }
 
                     bytes

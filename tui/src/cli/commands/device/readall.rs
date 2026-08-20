@@ -71,7 +71,7 @@ impl DeviceCommand for ReadAllArgs {
             let output_path = self.output_dir.join(format!("{}.bin", p.name));
             let mut output_file = BufWriter::new(File::create(&output_path)?);
 
-            let part_size = p.size as u64;
+            let part_size = p.size;
             let pb = AntumbraProgress::new(part_size);
 
             let mut progress_callback = pb.get_callback("Reading partition...", "Read complete!");

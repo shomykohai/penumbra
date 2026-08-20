@@ -42,7 +42,7 @@ impl DeviceCommand for RscFlashArgs {
             return Err(anyhow!("Partition '{}' not found on device.", self.partition));
         };
 
-        if file_size > part.size as u64 {
+        if file_size > part.size {
             return Err(anyhow!(
                 "File size ({}) exceeds partition size ({}).",
                 file_size,

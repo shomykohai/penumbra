@@ -23,7 +23,7 @@ use crate::activity::DeviceActivity;
 use crate::da::extensions::{KeyDeriveId, KeySize};
 use crate::da::*;
 use crate::devinfo::{DevInfo, DevInfoData};
-use crate::error::{ConnectionError, PenumbraError};
+use crate::error::{ConnectionError, PenumbraError, usize_checked};
 use crate::log_buffer::DeviceLog;
 use crate::port::{ConnectionType, MtkPort};
 use crate::preloader::PlProtocol;
@@ -696,7 +696,8 @@ impl<'a, P: MtkPort> Device<'a, P> {
             .ok_or_else(|| PenumbraError::PartitionNotFound(name.into()))?;
 
         let protocol = self.protocol.as_mut().unwrap();
-        protocol.read_flash(&mut self.port, part.address, part.size, part.kind, writer, progress)
+        let size = usize_checked(part.size)?;
+        protocol.read_flash(&mut self.port, part.address, size, part.kind, writer, progress)
     }
 
     /// Writes data to a specified partition on the device.
@@ -732,7 +733,8 @@ impl<'a, P: MtkPort> Device<'a, P> {
             .ok_or_else(|| PenumbraError::PartitionNotFound(name.into()))?;
 
         let protocol = self.protocol.as_mut().unwrap();
-        protocol.write_flash(&mut self.port, part.address, part.size, part.kind, reader, progress)
+        let size = usize_checked(part.size)?;
+        protocol.write_flash(&mut self.port, part.address, size, part.kind, reader, progress)
     }
 
     /// Erases a specified partition on the device.
@@ -772,7 +774,8 @@ impl<'a, P: MtkPort> Device<'a, P> {
             .ok_or_else(|| PenumbraError::PartitionNotFound(name.into()))?;
 
         let protocol = self.protocol.as_mut().unwrap();
-        protocol.erase_flash(&mut self.port, part.address, part.size, part.kind, progress)
+        let size = usize_checked(part.size)?;
+        protocol.erase_flash(&mut self.port, part.address, size, part.kind, progress)
     }
 
     /// Reads data from a specified offset and size on the device.

@@ -10,7 +10,15 @@ use crate::da::xflash::XFlash;
 use crate::da::xflash::cmd::*;
 use crate::da::xflash::structs::PartTableCat;
 use crate::da::{DownloadProtocol, NOOP_PROGRESS, ScatterFile};
-use crate::error::{Error, PenumbraError, ProtocolError, Result, XFlashError, XFlashErrorKind};
+use crate::error::{
+    Error,
+    PenumbraError,
+    ProtocolError,
+    Result,
+    XFlashError,
+    XFlashErrorKind,
+    usize_checked,
+};
 use crate::port::{MAX_TIMEOUT, MtkPort};
 use crate::storage::gpt::GPT_SIZE;
 use crate::storage::{GptType, PartitionKind, is_sparse};
@@ -208,7 +216,8 @@ where
         if size_data.len() < 8 {
             return Err(ProtocolError::InvalidResponseLength.into());
         }
-        u64::from_le_bytes(size_data[0..8].try_into().unwrap()) as usize
+        let raw_size = u64::from_le_bytes(size_data[0..8].try_into().unwrap());
+        usize_checked(raw_size)?
     };
 
     debug!("Starting readback of partition '{}'", part_name);
@@ -248,7 +257,7 @@ where
 
     debug!("Formatting partition '{}'", part_name);
 
-    xflash.progress_report(port, part.size, progress)?;
+    xflash.progress_report(port, usize_checked(part.size)?, progress)?;
 
     xflash.send_cmd(port, Cmd::DeviceCtrl)?;
     xflash.send_cmd(port, Cmd::EndDlInfo)?;
@@ -300,7 +309,13 @@ where
 
         xflash.devctrl(port, Cmd::SetRscInfo, Some(&[&payload]))?;
 
-        progress(offset as usize * 256 + bytes_read, size);
+        let done = usize_checked(
+            offset
+                .checked_mul(256)
+                .and_then(|v| v.checked_add(bytes_read as u64))
+                .ok_or(PenumbraError::PartitionSizeOverflow)?,
+        )?;
+        progress(done, size);
         offset += 1;
     }
 
@@ -328,7 +343,10 @@ where
         total_bytes: u64,
     ) -> impl FnMut(usize, usize) + 'a {
         move |written_now: usize, _: usize| {
-            progress((base + written_now as u64) as usize, total_bytes as usize);
+            progress(
+                usize::try_from(base + written_now as u64).unwrap_or(usize::MAX),
+                usize::try_from(total_bytes).unwrap_or(usize::MAX),
+            );
         }
     }
 
@@ -352,7 +370,7 @@ where
     let protected: Vec<_> = parts.iter().filter(|p| p.is_protected()).collect();
     let downloadable: Vec<_> = parts.iter().filter(|p| p.download).collect();
 
-    let protected_bytes: u64 = protected.iter().map(|p| p.part.size as u64).sum();
+    let protected_bytes: u64 = protected.iter().map(|p| p.part.size).sum();
 
     let mut download_bytes = 0u64;
     for part in &downloadable {
@@ -400,7 +418,7 @@ where
         PartTableCat::Pmt => {}
     }
 
-    progress(0, total_bytes as usize);
+    progress(0, usize_checked(total_bytes)?);
 
     if !download_only {
         for part in &protected {
@@ -426,7 +444,7 @@ where
             }
 
             res?;
-            global_written += part.part.size as u64;
+            global_written += part.part.size;
         }
     }
 
@@ -515,7 +533,7 @@ where
         }
     }
 
-    progress(total_bytes as usize, total_bytes as usize);
+    progress(usize_checked(total_bytes)?, usize_checked(total_bytes)?);
 
     Ok(())
 }

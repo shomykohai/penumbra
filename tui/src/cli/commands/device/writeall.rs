@@ -97,7 +97,7 @@ impl DeviceCommand for WriteAllArgs {
                 continue;
             };
 
-            if file_size > part.size as u64 {
+            if file_size > part.size {
                 return Err(anyhow::anyhow!(
                     "File size ({file_size}) exceeds partition size ({}).",
                     part.size

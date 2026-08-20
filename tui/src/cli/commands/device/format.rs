@@ -44,7 +44,7 @@ impl DeviceCommand for FormatArgs {
             return Err(anyhow::anyhow!("Partition '{}' not found on device.", self.partition));
         };
 
-        let pb = AntumbraProgress::new(part.size as u64);
+        let pb = AntumbraProgress::new(part.size);
 
         let mut progress_callback = pb.get_callback("Formatting...", "Format complete!");
 

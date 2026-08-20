@@ -85,7 +85,7 @@ impl<'a> DeviceIo<'a> {
     pub fn get_image_size(path: &Path, partition: &Partition) -> anyhow::Result<u64> {
         let size = std::fs::metadata(path)?.len();
 
-        if size > partition.size as u64 { Ok(partition.size as u64) } else { Ok(size) }
+        if size > partition.size { Ok(partition.size) } else { Ok(size) }
     }
 
     /// Asks the UI to open the file explorer to let the user pick a file or directory.
@@ -188,7 +188,7 @@ impl DeviceAction for ReadPartition {
             return Ok(false);
         };
 
-        let total_bytes: u64 = partitions.iter().map(|p| p.size as u64).sum();
+        let total_bytes: u64 = partitions.iter().map(|p| p.size).sum();
         let mut bytes_done: u64 = 0;
 
         io.progress_start(total_bytes, "Reading partitions...");
@@ -205,7 +205,7 @@ impl DeviceAction for ReadPartition {
                 reporter.update(bytes_done + written as u64, Some(format!("Reading '{name}'...")));
             })?;
 
-            bytes_done += partition.size as u64;
+            bytes_done += partition.size;
         }
 
         io.progress_finish("Partition read complete.");
@@ -282,7 +282,7 @@ impl DeviceAction for ErasePartition {
     fn run(&self, dev: &mut Device<'_, PortType>, io: &DeviceIo<'_>) -> anyhow::Result<bool> {
         let Some(partitions) = io.ask_partitions() else { return Ok(false) };
 
-        let total_bytes: u64 = partitions.iter().map(|p| p.size as u64).sum();
+        let total_bytes: u64 = partitions.iter().map(|p| p.size).sum();
         let mut bytes_done: u64 = 0;
 
         io.progress_start(total_bytes, "Erasing partitions...");
@@ -296,7 +296,7 @@ impl DeviceAction for ErasePartition {
                 reporter.update(bytes_done + written as u64, Some(format!("Erasing '{name}'...")));
             })?;
 
-            bytes_done += partition.size as u64;
+            bytes_done += partition.size;
         }
 
         io.progress_finish("Partition erase complete.");
@@ -321,7 +321,7 @@ impl DeviceAction for DumpAllPartitions {
 
         // We skip userdata since it's too big and not something people usually want to dump.
         // If someone really wants to do it, there's always the "Read Partition" action.
-        let total_bytes: u64 = partitions.iter().map(|p| p.size as u64).sum();
+        let total_bytes: u64 = partitions.iter().map(|p| p.size).sum();
         let mut bytes_done: u64 = 0;
 
         io.progress_start(total_bytes, "Dumping all partitions...");
@@ -338,7 +338,7 @@ impl DeviceAction for DumpAllPartitions {
                 reporter.update(bytes_done + written as u64, Some(format!("Dumping '{name}'...")));
             })?;
 
-            bytes_done += partition.size as u64;
+            bytes_done += partition.size;
         }
 
         io.progress_finish("All partitions dumped.");

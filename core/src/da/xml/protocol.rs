@@ -94,6 +94,8 @@ use crate::{
     exploit,
 };
 
+const MAX_PACKET: u32 = 16 * 1024 * 1024;
+
 pub struct Xml {
     pub(super) write_packed_length: Option<usize>,
     #[cfg(feature = "exploits")]
@@ -168,6 +170,9 @@ impl Xml {
     }
 
     fn drain_message<P: MtkPort>(&self, port: &mut P, length: u32) -> Result<()> {
+        if length > MAX_PACKET {
+            return Err(ProtocolError::InvalidResponseLength.into());
+        }
         let mut payload = vec![0u8; length as usize];
         port.read_exact(&mut payload)?;
 
@@ -657,6 +662,9 @@ impl DownloadProtocol for Xml {
 
         debug!("[RX] Packet header received: 0x{:X} bytes", hdr.length);
 
+        if hdr.length > MAX_PACKET {
+            return Err(ProtocolError::InvalidResponseLength.into());
+        }
         let mut data = vec![0u8; hdr.length as usize];
         port.read_exact(&mut data)?;
         Ok(data)
