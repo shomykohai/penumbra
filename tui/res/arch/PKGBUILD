@@ -1,6 +1,6 @@
 # PKGBUILD by hexman1999 (https://github.com/hexman1999)
 pkgname=antumbra-git
-pkgver=1.1.0.r64.gadc4dec
+pkgver=2.0.0.r64.gadc4dec
 pkgrel=1
 pkgdesc="🌘 MTK flash tool written in rust"
 arch=('x86_64' 'aarch64')
