@@ -1,6 +1,6 @@
 [package]
 name = "antumbra"
-version = "1.1.0"
+version = "2.0.0"
 edition.workspace = true
 authors = ["Shomy <git@itssho.my>"]
 license.workspace = true
