@@ -161,7 +161,7 @@ where
             xml.ack(port, None)?;
 
             let resp = String::from_utf8_lossy(&resp);
-            let result = get_tag::<String>(&resp, "result")?;
+            let result = get_tag::<String>(&resp, "arg/result")?;
 
             if result != "OK" {
                 let err_msg = get_tag::<String>(&resp, "arg/message").unwrap_or_default();
@@ -297,7 +297,7 @@ where
             xml.ack(port, None)?;
 
             let resp = String::from_utf8_lossy(&resp);
-            let result = get_tag::<String>(&resp, "result")?;
+            let result = get_tag::<String>(&resp, "arg/result")?;
 
             if result != "OK" {
                 let err_msg = get_tag::<String>(&resp, "arg/message").unwrap_or_default();
