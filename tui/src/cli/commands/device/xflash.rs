@@ -61,14 +61,7 @@ impl DeviceCommand for RscFlashArgs {
                 return Err(penumbra::error::PenumbraError::WrongProtocolVersion.into());
             };
 
-            set_rsc_info(
-                xflash,
-                port,
-                &part.name,
-                file_size as usize,
-                &mut reader,
-                &mut progress_callback,
-            )
+            set_rsc_info(xflash, port, &part.name, file_size, &mut reader, &mut progress_callback)
         })?;
 
         info!("Flashing to partition '{}' completed.", part.name);

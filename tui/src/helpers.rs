@@ -33,7 +33,7 @@ impl ScatterFiles {
         self.dir.join(clean)
     }
 
-    pub fn reader(&self, file_path: &str) -> penumbra::Result<(BufReader<File>, usize)> {
+    pub fn reader(&self, file_path: &str) -> penumbra::Result<(BufReader<File>, u64)> {
         let full_path = if Path::new(file_path).is_absolute() {
             PathBuf::from(file_path)
         } else {
@@ -43,7 +43,7 @@ impl ScatterFiles {
         debug!("Reading from input file: {:?}", full_path);
 
         let file = File::open(&full_path)?;
-        let size = file.metadata()?.len() as usize;
+        let size = file.metadata()?.len();
 
         Ok((BufReader::new(file), size))
     }
