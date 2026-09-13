@@ -10,15 +10,7 @@ use crate::da::xflash::XFlash;
 use crate::da::xflash::cmd::*;
 use crate::da::xflash::structs::PartTableCat;
 use crate::da::{DownloadProtocol, NOOP_PROGRESS, ScatterFile};
-use crate::error::{
-    Error,
-    PenumbraError,
-    ProtocolError,
-    Result,
-    XFlashError,
-    XFlashErrorKind,
-    usize_checked,
-};
+use crate::error::{Error, PenumbraError, ProtocolError, Result, XFlashError, XFlashErrorKind};
 use crate::port::{MAX_TIMEOUT, MtkPort};
 use crate::storage::gpt::GPT_SIZE;
 use crate::storage::{GptType, PartitionKind, is_sparse};
@@ -38,7 +30,7 @@ pub fn read_flash<P: MtkPort, W, F>(
     xflash: &mut XFlash,
     port: &mut P,
     addr: u64,
-    size: usize,
+    size: u64,
     section: PartitionKind,
     writer: W,
     progress: F,
@@ -52,13 +44,7 @@ where
     let storage_type = xflash.get_storage_type(port) as u32;
     let partition_type = section.into();
 
-    let params = FlashOpParams {
-        storage_type,
-        partition_type,
-        addr,
-        size: size as u64,
-        ..Default::default()
-    };
+    let params = FlashOpParams { storage_type, partition_type, addr, size, ..Default::default() };
 
     xflash.send_cmd(port, Cmd::ReadData)?;
     xflash.send(port, &params.to_bytes())?;
@@ -75,7 +61,7 @@ pub fn write_flash<P: MtkPort, R, F>(
     xflash: &mut XFlash,
     port: &mut P,
     addr: u64,
-    size: usize,
+    size: u64,
     section: PartitionKind,
     reader: R,
     progress: F,
@@ -91,13 +77,7 @@ where
     let storage_type = xflash.get_storage_type(port) as u32;
     let partition_type: u32 = section.into();
 
-    let params = FlashOpParams {
-        storage_type,
-        partition_type,
-        addr,
-        size: size as u64,
-        ..Default::default()
-    };
+    let params = FlashOpParams { storage_type, partition_type, addr, size, ..Default::default() };
 
     xflash.send_cmd(port, Cmd::WriteData)?;
     xflash.send(port, &params.to_bytes())?;
@@ -113,7 +93,7 @@ pub fn erase_flash<P: MtkPort, F>(
     xflash: &mut XFlash,
     port: &mut P,
     addr: u64,
-    size: usize,
+    size: u64,
     section: PartitionKind,
     progress: F,
 ) -> Result<()>
@@ -125,13 +105,7 @@ where
     let storage_type = xflash.get_storage_type(port) as u32;
     let partition_type = section.into();
 
-    let params = FlashOpParams {
-        storage_type,
-        partition_type,
-        addr,
-        size: size as u64,
-        ..Default::default()
-    };
+    let params = FlashOpParams { storage_type, partition_type, addr, size, ..Default::default() };
 
     xflash.send_cmd(port, Cmd::DeviceCtrl)?;
     xflash.send_cmd(port, Cmd::StartDlInfo)?;
@@ -154,7 +128,7 @@ pub fn write_partition<P: MtkPort, R, F>(
     xflash: &mut XFlash,
     port: &mut P,
     part_name: &str,
-    size: usize,
+    size: u64,
     reader: R,
     progress: F,
 ) -> Result<()>
@@ -216,8 +190,7 @@ where
         if size_data.len() < 8 {
             return Err(ProtocolError::InvalidResponseLength.into());
         }
-        let raw_size = u64::from_le_bytes(size_data[0..8].try_into().unwrap());
-        usize_checked(raw_size)?
+        u64::from_le_bytes(size_data[0..8].try_into().unwrap())
     };
 
     debug!("Starting readback of partition '{}'", part_name);
@@ -257,7 +230,7 @@ where
 
     debug!("Formatting partition '{}'", part_name);
 
-    xflash.progress_report(port, usize_checked(part.size)?, progress)?;
+    xflash.progress_report(port, part.size, progress)?;
 
     xflash.send_cmd(port, Cmd::DeviceCtrl)?;
     xflash.send_cmd(port, Cmd::EndDlInfo)?;
@@ -271,7 +244,7 @@ pub fn set_rsc_info<P: MtkPort, F, R>(
     xflash: &mut XFlash,
     port: &mut P,
     part_name: &str,
-    size: usize,
+    size: u64,
     mut reader: R,
     mut progress: F,
 ) -> Result<()>
@@ -309,12 +282,10 @@ where
 
         xflash.devctrl(port, Cmd::SetRscInfo, Some(&[&payload]))?;
 
-        let done = usize_checked(
-            offset
-                .checked_mul(256)
-                .and_then(|v| v.checked_add(bytes_read as u64))
-                .ok_or(PenumbraError::PartitionSizeOverflow)?,
-        )?;
+        let done = offset
+            .checked_mul(256)
+            .and_then(|v| v.checked_add(bytes_read as u64))
+            .ok_or(PenumbraError::ProgressOverflow)?;
         progress(done, size);
         offset += 1;
     }
@@ -338,15 +309,12 @@ where
     F: ProgressCallback,
 {
     fn wrapped_progress<'a>(
-        progress: &'a mut impl FnMut(usize, usize),
+        progress: &'a mut impl FnMut(u64, u64),
         base: u64,
         total_bytes: u64,
-    ) -> impl FnMut(usize, usize) + 'a {
-        move |written_now: usize, _: usize| {
-            progress(
-                usize::try_from(base + written_now as u64).unwrap_or(usize::MAX),
-                usize::try_from(total_bytes).unwrap_or(usize::MAX),
-            );
+    ) -> impl FnMut(u64, u64) + 'a {
+        move |written_now: u64, _: u64| {
+            progress(base.saturating_add(written_now), total_bytes);
         }
     }
 
@@ -377,14 +345,19 @@ where
         if let Some(path) = &part.path
             && let Ok((_, size)) = reader_source(&path.to_string_lossy())
         {
-            download_bytes += size as u64;
+            download_bytes =
+                download_bytes.checked_add(size).ok_or(PenumbraError::TotalSizeOverflow)?;
         }
     }
 
     let sgpt_sz = GPT_SIZE / 2 + block_size as usize;
     let gpt_bytes = GPT_SIZE + sgpt_sz;
 
-    let total_bytes = (protected_bytes * 2) + download_bytes + gpt_bytes as u64;
+    let total_bytes = protected_bytes
+        .checked_mul(2)
+        .and_then(|v| v.checked_add(download_bytes))
+        .and_then(|v| v.checked_add(gpt_bytes as u64))
+        .ok_or(PenumbraError::TotalSizeOverflow)?;
     let mut global_written = 0u64;
 
     let mut download_only = false;
@@ -418,7 +391,7 @@ where
         PartTableCat::Pmt => {}
     }
 
-    progress(0, usize_checked(total_bytes)?);
+    progress(0, total_bytes);
 
     if !download_only {
         for part in &protected {
@@ -444,7 +417,9 @@ where
             }
 
             res?;
-            global_written += part.part.size;
+            global_written = global_written
+                .checked_add(part.part.size)
+                .ok_or(PenumbraError::TotalSizeOverflow)?;
         }
     }
 
@@ -482,20 +457,24 @@ where
             xflash.write_partition(
                 port,
                 "PGPT",
-                GPT_SIZE,
+                GPT_SIZE as u64,
                 pgpt.as_slice(),
                 wrapped_progress(&mut progress, global_written, total_bytes),
             )?;
-            global_written += pgpt.len() as u64;
+            global_written = global_written
+                .checked_add(pgpt.len() as u64)
+                .ok_or(PenumbraError::TotalSizeOverflow)?;
 
             xflash.write_partition(
                 port,
                 "SGPT",
-                sgpt_sz,
+                sgpt_sz as u64,
                 sgpt,
                 wrapped_progress(&mut progress, global_written, total_bytes),
             )?;
-            global_written += sgpt.len() as u64;
+            global_written = global_written
+                .checked_add(sgpt.len() as u64)
+                .ok_or(PenumbraError::TotalSizeOverflow)?;
         }
         PartTableCat::Pmt => {}
     }
@@ -513,7 +492,8 @@ where
                 reader,
                 wrapped_progress(&mut progress, global_written, total_bytes),
             )?;
-            global_written += size as u64;
+            global_written =
+                global_written.checked_add(size).ok_or(PenumbraError::TotalSizeOverflow)?;
         }
     }
 
@@ -529,11 +509,12 @@ where
                 reader,
                 wrapped_progress(&mut progress, global_written, total_bytes),
             )?;
-            global_written += size as u64;
+            global_written =
+                global_written.checked_add(size).ok_or(PenumbraError::TotalSizeOverflow)?;
         }
     }
 
-    progress(usize_checked(total_bytes)?, usize_checked(total_bytes)?);
+    progress(total_bytes, total_bytes);
 
     Ok(())
 }

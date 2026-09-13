@@ -62,10 +62,6 @@ pub enum Error {
     Hacc(#[from] hacc::Error),
 }
 
-pub(crate) fn usize_checked(value: u64) -> Result<usize> {
-    usize::try_from(value).map_err(|_| PenumbraError::PartitionSizeOverflow.into())
-}
-
 #[derive(Debug, Error)]
 pub enum ConnectionError {
     #[error("Device port not found")]
@@ -174,8 +170,14 @@ pub enum PenumbraError {
     PartitionEntryOutOfBounds,
     #[error("Partition {0} not found")]
     PartitionNotFound(String),
-    #[error("Value exceeds host address width")]
+    #[error("Partition size overflow")]
     PartitionSizeOverflow,
+    #[error("Arithmetic overflow")]
+    ArithmeticOverflow,
+    #[error("Progress overflow")]
+    ProgressOverflow,
+    #[error("Total size overflow")]
+    TotalSizeOverflow,
     #[error("Unsupported storage type")]
     UnsupportedStorage,
     #[error("Invalid RPMB region")]

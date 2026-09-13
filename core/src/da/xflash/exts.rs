@@ -183,11 +183,11 @@ pub(super) fn peek<W: Writer, F: ProgressCallback, P: MtkPort>(
     xflash: &mut XFlash,
     port: &mut P,
     addr: u64,
-    length: usize,
+    length: u64,
     writer: W,
     progress: F,
 ) -> Result<()> {
-    let range = AddressLengthParams { addr, length: length as u64 };
+    let range = AddressLengthParams { addr, length };
 
     xflash.devctrl(port, Cmd::ExtReadMem, Some(&[&range.to_bytes()]))?;
     xflash.upload_data(port, length, writer, progress)?;
@@ -201,11 +201,11 @@ pub(super) fn poke<R: Reader, F: ProgressCallback, P: MtkPort>(
     xflash: &mut XFlash,
     port: &mut P,
     addr: u64,
-    length: usize,
+    length: u64,
     reader: R,
     progress: F,
 ) -> Result<()> {
-    let range = AddressLengthParams { addr, length: length as u64 };
+    let range = AddressLengthParams { addr, length };
 
     xflash.devctrl(port, Cmd::ExtWriteMem, Some(&[&range.to_bytes()]))?;
     xflash.download_data(port, length, reader, progress)?;
@@ -224,8 +224,8 @@ pub(super) fn sej_aes<R: Reader, W: Writer, P: MtkPort>(
 ) -> Result<()> {
     xflash.devctrl(port, Cmd::ExtSej, Some(&[&params.to_bytes()]))?;
 
-    xflash.download_data(port, params.length as usize, reader, NOOP_PROGRESS)?;
-    xflash.upload_data(port, params.length as usize, writer, NOOP_PROGRESS)?;
+    xflash.download_data(port, u64::from(params.length), reader, NOOP_PROGRESS)?;
+    xflash.upload_data(port, u64::from(params.length), writer, NOOP_PROGRESS)?;
 
     status_ok!(xflash, port)?;
 
@@ -264,7 +264,7 @@ pub(super) fn read_rpmb<W: Writer, F: ProgressCallback, P: MtkPort>(
 
     let params = RpmbParams { start_sector, sectors_count: num_sectors }.to_bytes();
     let region = (region as u32).to_le_bytes();
-    let data_len = num_sectors as usize * RPMB_FRAME_DATA_SZ;
+    let data_len = u64::from(num_sectors) * RPMB_FRAME_DATA_SZ as u64;
 
     xflash.devctrl(port, Cmd::ExtRpmbRead, Some(&[&region, &params]))?;
     xflash.upload_data(port, data_len, writer, progress)?;
@@ -294,7 +294,7 @@ pub(super) fn write_rpmb<R: Reader, F: ProgressCallback, P: MtkPort>(
 
     let params = RpmbParams { start_sector, sectors_count: num_sectors }.to_bytes();
     let region = (region as u32).to_le_bytes();
-    let data_len = num_sectors as usize * RPMB_FRAME_DATA_SZ;
+    let data_len = u64::from(num_sectors) * RPMB_FRAME_DATA_SZ as u64;
 
     xflash.devctrl(port, Cmd::ExtRpmbWrite, Some(&[&region, &params]))?;
     xflash.download_data_with(port, data_len, RPMB_WRITE_PKT_LEN, MAX_TIMEOUT, reader, progress)?;

@@ -63,7 +63,7 @@ pub struct ExtReadMem {
     #[xml(tag = "address", fmt = "0x{address:X}")]
     address: u32,
     #[xml(tag = "length", fmt = "0x{length:X}")]
-    length: usize,
+    length: u64,
 }
 
 #[derive(XmlCommand)]
@@ -71,7 +71,7 @@ pub struct ExtWriteMem {
     #[xml(tag = "address", fmt = "0x{address:X}")]
     address: u32,
     #[xml(tag = "length", fmt = "0x{length:X}")]
-    length: usize,
+    length: u64,
 }
 
 #[derive(XmlCommand)]
@@ -285,11 +285,12 @@ pub(super) fn peek<W: Writer, F: ProgressCallback, P: MtkPort>(
     xml: &mut Xml,
     port: &mut P,
     addr: u64,
-    length: usize,
+    length: u64,
     writer: W,
     progress: F,
 ) -> Result<()> {
-    xmlcmd!(xml, port, ExtReadMem, addr as u32, length)?;
+    let addr32 = u32::try_from(addr).map_err(|_| PenumbraError::ArithmeticOverflow)?;
+    xmlcmd!(xml, port, ExtReadMem, addr32, length)?;
 
     xml.upload_data(port, length, writer, progress)?;
 
@@ -300,11 +301,12 @@ pub(super) fn poke<R: Reader, F: ProgressCallback, P: MtkPort>(
     xml: &mut Xml,
     port: &mut P,
     addr: u64,
-    length: usize,
+    length: u64,
     reader: R,
     progress: F,
 ) -> Result<()> {
-    xmlcmd!(xml, port, ExtWriteMem, addr as u32, length)?;
+    let addr32 = u32::try_from(addr).map_err(|_| PenumbraError::ArithmeticOverflow)?;
+    xmlcmd!(xml, port, ExtWriteMem, addr32, length)?;
 
     xml.download_data(port, length, reader, progress)?;
 
@@ -395,8 +397,8 @@ pub(super) fn sej_aes<R: Reader, W: Writer, P: MtkPort>(
         params.key_sz.to_string()
     )?;
 
-    xml.download_data(port, params.length as usize, reader, NOOP_PROGRESS)?;
-    xml.upload_data(port, params.length as usize, writer, NOOP_PROGRESS)?;
+    xml.download_data(port, u64::from(params.length), reader, NOOP_PROGRESS)?;
+    xml.upload_data(port, u64::from(params.length), writer, NOOP_PROGRESS)?;
 
     xml.lifetime_ack(port, XmlCmdLifetime::CmdEnd)
 }
@@ -432,7 +434,7 @@ pub(super) fn read_rpmb<W: Writer, F: ProgressCallback, P: MtkPort>(
     };
 
     xmlcmd!(xml, port, ExtRpmbRead, region as u32, start_sector, num_sectors)?;
-    xml.upload_data(port, num_sectors as usize * RPMB_FRAME_DATA_SZ, writer, progress)?;
+    xml.upload_data(port, u64::from(num_sectors) * RPMB_FRAME_DATA_SZ as u64, writer, progress)?;
     xml.lifetime_ack(port, XmlCmdLifetime::CmdEnd)
 }
 
@@ -457,7 +459,7 @@ pub(super) fn write_rpmb<R: Reader, F: ProgressCallback, P: MtkPort>(
         return Err(PenumbraError::RpmbSectorOutOfBounds.into());
     };
 
-    let data_len = num_sectors as usize * RPMB_FRAME_DATA_SZ;
+    let data_len = u64::from(num_sectors) * RPMB_FRAME_DATA_SZ as u64;
 
     xmlcmd!(xml, port, ExtRpmbWrite, region as u32, start_sector, num_sectors)?;
     xml.download_data(port, data_len, reader, progress)?;

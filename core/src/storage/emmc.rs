@@ -4,10 +4,10 @@
 */
 use wincode::{Deserialize, SchemaRead, SchemaWrite};
 
-use crate::error::{PenumbraError, Result};
+use crate::error::Result;
 use crate::storage::{PartitionKind, Storage, StorageType};
 use crate::traits::FromBytes;
-use crate::utils::xml::{get_tag, get_tag_u64};
+use crate::utils::xml::{get_tag, get_tag_hex, get_tag_u64};
 
 /// Represents eMMC storage information.
 #[derive(Default, Debug, SchemaRead, SchemaWrite, Clone, FromBytes)]
@@ -177,8 +177,7 @@ impl Storage for EmmcStorage {
 
 impl EmmcStorage {
     pub fn from_xml(xml: &str) -> Result<Self> {
-        let block_size = u32::try_from(get_tag_u64(xml, "emmc/block_size")?)
-            .map_err(|_| PenumbraError::PartitionSizeOverflow)?;
+        let block_size = get_tag_hex::<u32>(xml, "emmc/block_size")?;
 
         let boot1_size = get_tag_u64(xml, "emmc/boot1_size")?;
         let boot2_size = get_tag_u64(xml, "emmc/boot2_size")?;

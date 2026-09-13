@@ -94,8 +94,6 @@ use crate::{
     exploit,
 };
 
-const MAX_PACKET: u32 = 16 * 1024 * 1024;
-
 pub struct Xml {
     pub(super) write_packed_length: Option<usize>,
     #[cfg(feature = "exploits")]
@@ -170,10 +168,13 @@ impl Xml {
     }
 
     fn drain_message<P: MtkPort>(&self, port: &mut P, length: u32) -> Result<()> {
-        if length > MAX_PACKET {
+        if length < 4 {
             return Err(ProtocolError::InvalidResponseLength.into());
         }
-        let mut payload = vec![0u8; length as usize];
+        let len = usize::try_from(length).map_err(|_| PenumbraError::BufferTooSmall)?;
+        let mut payload = Vec::new();
+        payload.try_reserve(len).map_err(|_| PenumbraError::BufferTooSmall)?;
+        payload.resize(len, 0);
         port.read_exact(&mut payload)?;
 
         let body = String::from_utf8_lossy(&payload[4..]).into_owned();
@@ -221,7 +222,7 @@ impl Xml {
     /// Sends an acknowledgment to the device.
     /// By default, it sends "OK\0".
     /// If a value is provided, it sends "OK@{value}\0".
-    pub fn ack<P: MtkPort>(&mut self, port: &mut P, value: Option<usize>) -> Result<()> {
+    pub fn ack<P: MtkPort>(&mut self, port: &mut P, value: Option<u64>) -> Result<()> {
         if let Some(v) = value {
             self.send(port, format!("OK@{v}\0").as_bytes())
         } else {
@@ -371,11 +372,11 @@ impl Xml {
         &mut self,
         port: &mut P,
         resp: &str,
-        size: usize,
+        size: u64,
         timeout: Duration,
         mut reader: R,
         mut progress: F,
-    ) -> Result<usize> {
+    ) -> Result<u64> {
         let cmd: String = get_tag(resp, "command")?;
         if cmd != CMD_DOWNLOAD_FILE {
             debug!("Invalid xml response for CMD:DOWNLOAD-FILE: {}", resp);
@@ -405,13 +406,13 @@ impl Xml {
         self.write_packed_length = Some(packet_length);
 
         let mut chunk = vec![0u8; packet_length];
-        let mut bytes_sent = 0;
+        let mut bytes_sent = 0u64;
 
         port.set_timeout(timeout)?;
 
         let result = 'download: {
             while bytes_sent < size {
-                let to_read = packet_length.min(size - bytes_sent);
+                let to_read = (size - bytes_sent).min(packet_length as u64) as usize;
                 if let Err(e) = reader.read_exact_fill(&mut chunk[..to_read]) {
                     break 'download Err(e.into());
                 }
@@ -431,7 +432,7 @@ impl Xml {
                     break 'download Err(e);
                 }
 
-                bytes_sent += to_read;
+                bytes_sent += to_read as u64;
                 progress(bytes_sent, size);
             }
 
@@ -452,7 +453,7 @@ impl Xml {
         resp: &str,
         mut writer: W,
         mut progress: F,
-    ) -> Result<usize> {
+    ) -> Result<u64> {
         let cmd: String = get_tag(resp, "command")?;
         if cmd != CMD_UPLOAD_FILE {
             debug!("Invalid xml response for CMD:UPLOAD-FILE: {}", resp);
@@ -478,18 +479,18 @@ impl Xml {
             let trimmed = resp.trim_end_matches('\0').trim();
             let hex = trimmed.strip_prefix("OK@0x").ok_or(ProtocolError::InvalidResponseFormat)?;
 
-            usize::from_str_radix(hex, 16).map_err(|_| ProtocolError::InvalidResponseFormat)?
+            u64::from_str_radix(hex, 16).map_err(|_| ProtocolError::InvalidResponseFormat)?
         };
 
         self.ack(port, None)?;
 
-        let mut bytes_received = 0;
+        let mut bytes_received = 0u64;
 
         port.set_timeout(MAX_TIMEOUT)?;
 
         let result = 'upload: {
             while bytes_received < size {
-                let to_read = packet_length.min(size - bytes_received);
+                let to_read = (size - bytes_received).min(packet_length as u64) as usize;
                 if let Err(e) = self.read_ack(port) {
                     break 'upload Err(e);
                 }
@@ -509,7 +510,7 @@ impl Xml {
                     break 'upload Err(e);
                 }
 
-                bytes_received += to_read;
+                bytes_received += to_read as u64;
                 progress(bytes_received, size);
             }
 
@@ -574,7 +575,7 @@ impl Xml {
                     break 'progress Err(ProtocolError::InvalidResponseFormat.into());
                 };
 
-                let Ok(progress_value) = prog.parse::<usize>() else {
+                let Ok(progress_value) = prog.parse::<u64>() else {
                     break 'progress Err(ProtocolError::InvalidResponseFormat.into());
                 };
 
@@ -652,7 +653,7 @@ impl DownloadProtocol for Xml {
         xmlcmd!(self, port, BootTo, addr, addr)?;
 
         let reader = BufReader::new(data);
-        self.download_data(port, data.len(), reader, NOOP_PROGRESS)?;
+        self.download_data(port, data.len() as u64, reader, NOOP_PROGRESS)?;
 
         self.lifetime_ack(port, XmlCmdLifetime::CmdEnd)
     }
@@ -662,10 +663,13 @@ impl DownloadProtocol for Xml {
 
         debug!("[RX] Packet header received: 0x{:X} bytes", hdr.length);
 
-        if hdr.length > MAX_PACKET {
-            return Err(ProtocolError::InvalidResponseLength.into());
+        if hdr.length == 0 {
+            return Ok(Vec::new());
         }
-        let mut data = vec![0u8; hdr.length as usize];
+        let len = usize::try_from(hdr.length).map_err(|_| PenumbraError::BufferTooSmall)?;
+        let mut data = Vec::new();
+        data.try_reserve(len).map_err(|_| PenumbraError::BufferTooSmall)?;
+        data.resize(len, 0);
         port.read_exact(&mut data)?;
         Ok(data)
     }
@@ -718,10 +722,10 @@ impl DownloadProtocol for Xml {
     fn download_data<R: Reader, F: ProgressCallback, P: MtkPort>(
         &mut self,
         port: &mut P,
-        size: usize,
+        size: u64,
         reader: R,
         progress: F,
-    ) -> Result<usize> {
+    ) -> Result<u64> {
         let resp = self.read_data(port)?;
         let resp = String::from_utf8_lossy(&resp);
 
@@ -731,10 +735,10 @@ impl DownloadProtocol for Xml {
     fn upload_data<W: Writer, F: ProgressCallback, P: MtkPort>(
         &mut self,
         port: &mut P,
-        _size: usize,
+        _size: u64,
         writer: W,
         progress: F,
-    ) -> Result<usize> {
+    ) -> Result<u64> {
         let resp = self.read_data(port)?;
         let resp = String::from_utf8_lossy(&resp);
 
@@ -744,7 +748,7 @@ impl DownloadProtocol for Xml {
     fn progress_report<F: ProgressCallback, P: MtkPort>(
         &mut self,
         port: &mut P,
-        _size: usize,
+        _size: u64,
         progress: F,
     ) -> Result<()> {
         let resp = self.read_data(port)?;
@@ -757,7 +761,7 @@ impl DownloadProtocol for Xml {
         &mut self,
         port: &mut P,
         addr: u64,
-        size: usize,
+        size: u64,
         section: crate::PartitionKind,
         writer: W,
         progress: F,
@@ -769,7 +773,7 @@ impl DownloadProtocol for Xml {
         &mut self,
         port: &mut P,
         addr: u64,
-        size: usize,
+        size: u64,
         section: crate::PartitionKind,
         reader: R,
         progress: F,
@@ -781,7 +785,7 @@ impl DownloadProtocol for Xml {
         &mut self,
         port: &mut P,
         addr: u64,
-        size: usize,
+        size: u64,
         section: crate::PartitionKind,
         progress: F,
     ) -> Result<()> {
@@ -806,7 +810,7 @@ impl DownloadProtocol for Xml {
         &mut self,
         port: &mut P,
         name: &str,
-        size: usize,
+        size: u64,
         reader: R,
         progress: F,
     ) -> Result<()> {
@@ -885,7 +889,7 @@ impl DownloadProtocol for Xml {
     }
 
     fn read_efuses<W: Writer, P: MtkPort>(&mut self, port: &mut P, writer: W) -> Result<()> {
-        const EFUSE_XML_BUF_LEN: usize = 0x5000;
+        const EFUSE_XML_BUF_LEN: u64 = 0x5000;
 
         xmlcmd!(self, port, ReadEfuse)?;
         self.upload_data(port, EFUSE_XML_BUF_LEN, writer, NOOP_PROGRESS)?;
@@ -896,7 +900,7 @@ impl DownloadProtocol for Xml {
         &mut self,
         port: &mut P,
         reader: R,
-        size: usize,
+        size: u64,
     ) -> Result<()> {
         xmlcmd!(self, port, WriteEfuse)?;
         self.download_data(port, size, reader, NOOP_PROGRESS)?;
@@ -929,7 +933,12 @@ impl DownloadProtocol for Xml {
                 info!("No available signers for DA SLA, trying dummy signature...");
                 let dummy_sig = [0u8; 256];
                 xmlcmd!(self, port, SecuritySetFlashPolicy, "Penumbra Dummy SLA challenge")?;
-                self.download_data(port, dummy_sig.len(), dummy_sig.as_slice(), NOOP_PROGRESS)?;
+                self.download_data(
+                    port,
+                    dummy_sig.len() as u64,
+                    dummy_sig.as_slice(),
+                    NOOP_PROGRESS,
+                )?;
                 if self.lifetime_ack(port, XmlCmdLifetime::CmdEnd).is_ok() {
                     info!("DA SLA signature accepted (dummy)!");
                     return Ok(());
@@ -975,7 +984,7 @@ impl DownloadProtocol for Xml {
         info!("Signed DA SLA challenge. Uploading to device...");
 
         xmlcmd!(self, port, SecuritySetFlashPolicy, "Penumbra SLA challenge")?;
-        self.download_data(port, signed.len(), signed.as_slice(), NOOP_PROGRESS)?;
+        self.download_data(port, signed.len() as u64, signed.as_slice(), NOOP_PROGRESS)?;
         self.lifetime_ack(port, XmlCmdLifetime::CmdEnd)?;
         info!("DA SLA signature accepted!");
 
@@ -1011,7 +1020,7 @@ impl DownloadProtocolExt for Xml {
         self.read_flash(
             port,
             seccfg_part.address,
-            seccfg_data.len(),
+            seccfg_data.len() as u64,
             section,
             seccfg_data.as_mut_slice(),
             NOOP_PROGRESS,
@@ -1090,7 +1099,7 @@ impl DownloadProtocolExt for Xml {
         self.write_partition(
             port,
             "seccfg",
-            seccfg_data.len(),
+            seccfg_data.len() as u64,
             seccfg_data.as_slice(),
             NOOP_PROGRESS,
         )
@@ -1125,7 +1134,7 @@ impl DownloadProtocolExt for Xml {
         &mut self,
         port: &mut P,
         addr: u64,
-        length: usize,
+        length: u64,
         writer: W,
         progress: F,
     ) -> Result<()> {
@@ -1136,7 +1145,7 @@ impl DownloadProtocolExt for Xml {
         &mut self,
         port: &mut P,
         addr: u64,
-        length: usize,
+        length: u64,
         reader: R,
         progress: F,
     ) -> Result<()> {

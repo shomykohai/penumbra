@@ -25,7 +25,7 @@ use crate::da::xml::{
     XmlCmdLifetime,
 };
 use crate::da::{NOOP_PROGRESS, ScatterFile, Xml};
-use crate::error::{PenumbraError, ProtocolError, XmlErrorKind, usize_checked};
+use crate::error::{PenumbraError, ProtocolError, XmlErrorKind};
 use crate::port::{MAX_TIMEOUT, MtkPort};
 use crate::storage::is_sparse;
 use crate::traits::{
@@ -44,7 +44,7 @@ pub fn read_flash<P, W, F>(
     xml: &mut Xml,
     port: &mut P,
     addr: u64,
-    size: usize,
+    size: u64,
     section: PartitionKind,
     writer: W,
     progress: F,
@@ -69,7 +69,7 @@ pub fn write_flash<P, R, F>(
     xml: &mut Xml,
     port: &mut P,
     addr: u64,
-    size: usize,
+    size: u64,
     section: PartitionKind,
     reader: R,
     progress: F,
@@ -96,7 +96,7 @@ pub fn erase_flash<P, F>(
     xml: &mut Xml,
     port: &mut P,
     addr: u64,
-    size: usize,
+    size: u64,
     section: PartitionKind,
     progress: F,
 ) -> Result<()>
@@ -142,7 +142,7 @@ pub fn write_partition<P, R, F>(
     xml: &mut Xml,
     port: &mut P,
     part_name: &str,
-    size: usize,
+    size: u64,
     mut reader: R,
     mut progress: F,
 ) -> Result<()>
@@ -263,14 +263,14 @@ where
 
     xmlcmd!(xml, port, FlashUpdate)?;
 
-    xml.download_data(port, scatter.len(), scatter.as_bytes(), NOOP_PROGRESS)?;
+    xml.download_data(port, scatter.len() as u64, scatter.as_bytes(), NOOP_PROGRESS)?;
 
     let mut total_bytes = 0u64;
     for part in parts.iter().filter(|p| p.download) {
         if let Some(path) = &part.path
             && let Ok((_, size)) = reader_source(&path.to_string_lossy())
         {
-            total_bytes += size as u64;
+            total_bytes = total_bytes.checked_add(size).ok_or(PenumbraError::TotalSizeOverflow)?;
         }
     }
 
@@ -286,7 +286,7 @@ where
             .to_owned()
     };
 
-    let total = usize_checked(total_bytes)?;
+    let total = total_bytes;
     progress(0, total);
 
     loop {
@@ -313,8 +313,8 @@ where
 
         debug!("Received {} command.", cmd);
 
-        let mut file_progress = |file_written: usize, _file_total: usize| {
-            progress(usize::try_from(global_written + file_written as u64).unwrap_or(total), total);
+        let mut file_progress = |file_written: u64, _file_total: u64| {
+            progress(global_written.saturating_add(file_written), total);
         };
 
         match cmd.as_str() {
@@ -337,7 +337,8 @@ where
 
                 xml.process_download_data(port, &resp, size, timeout, reader, &mut file_progress)?;
 
-                global_written += size as u64;
+                global_written =
+                    global_written.checked_add(size).ok_or(PenumbraError::TotalSizeOverflow)?;
 
                 // The DA, after writing a sparse image, will hang for a few seconds, more than
                 // the default MIN_TIMEOUT.
@@ -382,19 +383,15 @@ where
                                         part.part
                                             .size
                                             .checked_mul(2)
-                                            .ok_or(PenumbraError::PartitionSizeOverflow)?,
+                                            .ok_or(PenumbraError::TotalSizeOverflow)?,
                                     )
-                                    .ok_or(PenumbraError::PartitionSizeOverflow)?;
+                                    .ok_or(PenumbraError::TotalSizeOverflow)?;
                             }
                         }
 
                         rcd = Some(parsed_record);
 
-                        progress(
-                            usize::try_from(global_written + bytes as u64)
-                                .map_err(|_| PenumbraError::PartitionSizeOverflow)?,
-                            usize_checked(total_bytes)?,
-                        );
+                        progress(global_written.saturating_add(bytes), total_bytes);
                     }
 
                     bytes
@@ -404,7 +401,9 @@ where
                     xml.process_upload_data(port, &resp, writer, &mut file_progress)?
                 };
 
-                global_written += uploaded_bytes as u64;
+                global_written = global_written
+                    .checked_add(uploaded_bytes)
+                    .ok_or(PenumbraError::TotalSizeOverflow)?;
             }
             CMD_PROGRESS_REPORT => {
                 let message = get_tag::<String>(&resp, "arg/message").unwrap_or_default();

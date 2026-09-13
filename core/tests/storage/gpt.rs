@@ -262,5 +262,5 @@ fn test_gpt_sub_block_rounds_up() {
     let out = gpt.to_partitions(&storage);
     assert_eq!(out.len(), 1);
     assert_eq!(out[0].address, 0x8000);
-    assert_eq!(out[0].size, 0x1000);
+    assert_eq!(out[0].size, u64::from(storage.block_size()));
 }

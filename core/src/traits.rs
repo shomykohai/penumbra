@@ -4,10 +4,10 @@
 */
 pub use penumbra_macros::{FromBytes, ToBytes};
 
-pub trait ProgressCallback = FnMut(usize, usize) + Send;
+pub trait ProgressCallback = FnMut(u64, u64) + Send;
 pub trait Reader = std::io::Read + Send;
 pub trait Writer = std::io::Write + Send;
-pub trait ReaderSource<R: Reader> = FnMut(&str) -> crate::Result<(R, usize)> + Send;
+pub trait ReaderSource<R: Reader> = FnMut(&str) -> crate::Result<(R, u64)> + Send;
 pub trait WriterSink<W: Writer> = FnMut(&str) -> crate::Result<W> + Send;
 
 pub trait ToBytes {

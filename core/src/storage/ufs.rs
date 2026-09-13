@@ -4,10 +4,10 @@
 */
 use wincode::{Deserialize, SchemaRead, SchemaWrite};
 
-use crate::error::{PenumbraError, Result};
+use crate::error::Result;
 use crate::storage::{PartitionKind, Storage, StorageType};
 use crate::traits::FromBytes;
-use crate::utils::xml::{get_tag, get_tag_u64};
+use crate::utils::xml::{get_tag, get_tag_hex, get_tag_u64};
 
 #[repr(C)]
 #[derive(Debug, SchemaRead, SchemaWrite, Clone, FromBytes)]
@@ -211,8 +211,7 @@ impl Storage for UfsStorage {
 
 impl UfsStorage {
     pub fn from_xml(xml: &str) -> Result<Self> {
-        let block_size = u32::try_from(get_tag_u64(xml, "ufs/block_size")?)
-            .map_err(|_| PenumbraError::PartitionSizeOverflow)?;
+        let block_size = get_tag_hex::<u32>(xml, "ufs/block_size")?;
         let lu0_size = get_tag_u64(xml, "ufs/lua0_size")?;
         let lu1_size = get_tag_u64(xml, "ufs/lua1_size")?;
         let lu2_size = get_tag_u64(xml, "ufs/lua2_size")?;

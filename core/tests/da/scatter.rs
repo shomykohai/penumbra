@@ -113,7 +113,7 @@ fn test_resized_reserved_oversize_keeps_address() {
     let out = file.partitions_resized(&storage);
     assert_eq!(out.len(), 1);
     assert_eq!(out[0].part.address, sentinel);
-    assert!(out[0].part.address != 0);
+    assert_eq!(out[0].part.size, user_size + 0x1000);
 }
 
 #[test]
@@ -150,5 +150,8 @@ fn test_resized_unordered_keeps_size() {
     let file = ScatterFile { parts: vec![first, second] };
     let out = file.partitions_resized(&storage);
     assert_eq!(out.len(), 2);
+    assert_eq!(out[0].part.address, 0x5000);
     assert_eq!(out[0].part.size, 0x1000);
+    assert_eq!(out[1].part.address, 0x4000);
+    assert_eq!(out[1].part.size, 0x1000);
 }
