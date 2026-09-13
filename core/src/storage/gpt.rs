@@ -119,9 +119,13 @@ impl Gpt {
 
         let entries_data = match gpt_type {
             GptType::Pgpt => {
-                let start = (header.part_entry_lba as usize)
-                    .checked_mul(sector_size)
-                    .ok_or(PenumbraError::GptEntryArrayOverflow)?;
+                let start = usize::try_from(
+                    header
+                        .part_entry_lba
+                        .checked_mul(sector_size as u64)
+                        .ok_or(PenumbraError::GptEntryArrayOverflow)?,
+                )
+                .map_err(|_| PenumbraError::GptEntryArrayOverflow)?;
                 let end = start.checked_add(len).ok_or(PenumbraError::GptEntryArrayOverflow)?;
 
                 data.get(start..end).ok_or(PenumbraError::PartitionArrayOutOfBounds)?
@@ -190,15 +194,25 @@ impl Gpt {
         let mut partitions = Vec::with_capacity(MAX_GPT_PARTS);
 
         for entry in &self.entries {
-            let blocks = entry.end_lba.saturating_sub(entry.start_lba) + 1;
-            let part_size = blocks as usize * self.header.sector_size;
+            if entry.end_lba < entry.start_lba {
+                continue;
+            }
 
-            partitions.push(Partition::new(
-                &entry.name(),
-                part_size,
-                entry.start_lba * self.header.sector_size as u64,
-                user_section,
-            ));
+            let Some(blocks) =
+                entry.end_lba.checked_sub(entry.start_lba).and_then(|b| b.checked_add(1))
+            else {
+                continue;
+            };
+
+            let Some(part_size) = blocks.checked_mul(self.header.sector_size as u64) else {
+                continue;
+            };
+
+            let Some(address) = entry.start_lba.checked_mul(self.header.sector_size as u64) else {
+                continue;
+            };
+
+            partitions.push(Partition::new(&entry.name(), part_size, address, user_section));
         }
 
         partitions
@@ -255,8 +269,15 @@ impl Gpt {
 
             let uuid = Uuid::new_v4().into_bytes();
 
+            if part.size == 0 {
+                continue;
+            }
+
+            let blocks = part.size.div_ceil(block_size);
             let start_lba = part.address / block_size;
-            let end_lba = (part.size as u64 / block_size) + start_lba - 1;
+            let Some(end_lba) = start_lba.checked_add(blocks).and_then(|e| e.checked_sub(1)) else {
+                continue;
+            };
             let mut name_raw = [0u16; 36];
 
             for (dest, src) in name_raw.iter_mut().zip(part.name.encode_utf16()) {

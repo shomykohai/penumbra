@@ -57,9 +57,9 @@ impl AntumbraProgress {
         &'a self,
         running_msg: &'a str,
         finished_msg: &'a str,
-    ) -> impl FnMut(usize, usize) + 'a {
-        move |written: usize, total: usize| {
-            self.update(written as u64, running_msg);
+    ) -> impl FnMut(u64, u64) + 'a {
+        move |written: u64, total: u64| {
+            self.update(written, running_msg);
 
             if written >= total {
                 self.finish(finished_msg);

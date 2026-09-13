@@ -101,13 +101,13 @@ impl From<PartitionKind> for u32 {
 #[derive(Debug, Clone)]
 pub struct Partition {
     pub name: String,
-    pub size: usize,
+    pub size: u64,
     pub address: u64,
     pub kind: PartitionKind,
 }
 
 impl Partition {
-    pub fn new(name: &str, size: usize, address: u64, kind: PartitionKind) -> Self {
+    pub fn new(name: &str, size: u64, address: u64, kind: PartitionKind) -> Self {
         Self { name: name.to_string(), size, address, kind }
     }
 }

@@ -1,7 +1,7 @@
 use penumbra_mtk::storage::gpt::GPT_SIZE;
 use penumbra_mtk::storage::{EmmcStorage, GptType, UfsStorage};
 use penumbra_mtk::traits::FromBytes;
-use penumbra_mtk::{Gpt, Storage, StorageKind};
+use penumbra_mtk::{Gpt, Partition, Storage, StorageKind};
 
 const GPT: &[u8] = include_bytes!("../files/storage/PGPT.bin");
 const EMMC_RESP: &[u8] = include_bytes!("../files/storage/emmc_resp.bin");
@@ -61,7 +61,7 @@ fn test_gpt_partition_addresses() {
 
     assert_eq!(parts.len(), PART_COUNT);
 
-    let expected: [(&str, u64, usize); 6] = [
+    let expected: [(&str, u64, u64); 6] = [
         ("misc", 0x8000, 0x80000),
         ("para", 0x88000, 0x80000),
         ("expdb", 0x108000, 0x8000000),
@@ -237,4 +237,30 @@ fn test_gpt_gen_matches_part_count() {
         new_parts.len(),
         parts.len()
     );
+}
+
+#[test]
+fn test_gpt_skips_zero_size() {
+    let storage = ufs_storage();
+    let parts = vec![
+        Partition::new("misc", 0x80000, 0x8000, storage.get_user_part()),
+        Partition::new("empty", 0, 0x100000, storage.get_user_part()),
+    ];
+    let gpt = Gpt::from_partitions(&parts, &storage, GptType::Pgpt)
+        .expect("GPT should be created successfully");
+    let out = gpt.to_partitions(&storage);
+    assert_eq!(out.len(), 1);
+    assert_eq!(out[0].name, "misc");
+}
+
+#[test]
+fn test_gpt_sub_block_rounds_up() {
+    let storage = ufs_storage();
+    let parts = vec![Partition::new("tiny", 100, 0x8000, storage.get_user_part())];
+    let gpt = Gpt::from_partitions(&parts, &storage, GptType::Pgpt)
+        .expect("GPT should be created successfully");
+    let out = gpt.to_partitions(&storage);
+    assert_eq!(out.len(), 1);
+    assert_eq!(out[0].address, 0x8000);
+    assert_eq!(out[0].size, u64::from(storage.block_size()));
 }

@@ -8,7 +8,7 @@ use rust_yaml::{Value, Yaml};
 
 use crate::error::PenumbraError;
 use crate::storage::{EmmcPartition, UfsPartition};
-use crate::utils::xml::{get_tag, get_tag_usize};
+use crate::utils::xml::{get_tag, get_tag_u64};
 use crate::utils::yaml::YamlValueExt;
 use crate::{Partition, PartitionKind, Result, Storage, StorageKind, StorageType};
 
@@ -137,7 +137,7 @@ impl ScatterPartition {
         let region_str = item.get_str("region").and_then(|v| v.as_str()).unwrap_or("");
         let is_download = item.get_bool("is_download").unwrap_or(false);
         let start_addr = item.get_num::<u64>("linear_start_addr").unwrap_or(0);
-        let size = item.get_num::<u64>("partition_size").unwrap_or(0) as usize;
+        let size = item.get_num::<u64>("partition_size").unwrap_or(0);
 
         let op =
             item.get_str("operation_type").and_then(|v| v.as_str()).unwrap_or("INVISIBLE").into();
@@ -159,8 +159,8 @@ impl ScatterPartition {
         let file_name: String = get_tag(xml, "file_name")?;
         let region_str: String = get_tag(xml, "region")?;
         let is_download = get_tag::<String>(xml, "is_download")? == "true";
-        let start_addr = get_tag_usize(xml, "linear_start_addr")? as u64;
-        let size = get_tag_usize(xml, "partition_size")?;
+        let start_addr = get_tag_u64(xml, "linear_start_addr")?;
+        let size = get_tag_u64(xml, "partition_size")?;
 
         let op_str: String = get_tag(xml, "operation_type").unwrap_or_default();
         let op = if op_str.is_empty() { ScatterOp::Invisible } else { op_str.as_str().into() };
@@ -264,17 +264,21 @@ impl ScatterFile {
 
         for idx in (0..parts.len()).rev() {
             if parts[idx].is_reserved() {
-                let size = parts[idx].part.size as u64;
+                let size = parts[idx].part.size;
+                let current = parts[idx].part.address;
 
                 parts[idx].part.address = if idx + 1 == parts.len() {
-                    user_size - size
+                    user_size.checked_sub(size).unwrap_or(current)
                 } else {
-                    parts[idx + 1].part.address - size
+                    parts[idx + 1].part.address.checked_sub(size).unwrap_or(current)
                 };
             } else if (parts[idx].need_resize() || parts[idx].part.size == 0)
                 && let Some(next) = parts.get(idx + 1)
             {
-                parts[idx].part.size = (next.part.address - parts[idx].part.address) as usize;
+                let current = parts[idx].part.address;
+                if let Some(sz) = next.part.address.checked_sub(current) {
+                    parts[idx].part.size = sz;
+                }
             }
         }
 

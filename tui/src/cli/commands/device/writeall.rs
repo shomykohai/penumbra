@@ -97,7 +97,7 @@ impl DeviceCommand for WriteAllArgs {
                 continue;
             };
 
-            if file_size > part.size as u64 {
+            if file_size > part.size {
                 return Err(anyhow::anyhow!(
                     "File size ({file_size}) exceeds partition size ({}).",
                     part.size
@@ -110,12 +110,9 @@ impl DeviceCommand for WriteAllArgs {
 
             info!("Downloading to partition '{}'...", part.name);
 
-            if let Err(e) = dev.write_partition(
-                &part.name,
-                file_size as usize,
-                &mut reader,
-                &mut progress_callback,
-            ) {
+            if let Err(e) =
+                dev.write_partition(&part.name, file_size, &mut reader, &mut progress_callback)
+            {
                 pb.abandon("Download failed!");
                 Err(e)?;
             }

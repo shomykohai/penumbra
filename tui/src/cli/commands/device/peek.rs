@@ -23,8 +23,8 @@ pub struct PeekArgs {
     #[clap(value_parser=maybe_hex::<u64>)]
     pub address: u64,
     /// The number of bytes to read.
-    #[clap(value_parser=maybe_hex::<usize>)]
-    pub length: usize,
+    #[clap(value_parser=maybe_hex::<u64>)]
+    pub length: u64,
     /// The output file to save the read data to.
     pub output_file: PathBuf,
 }

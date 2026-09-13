@@ -172,7 +172,13 @@ impl<'a> XFlash<'a> {
     }
 
     fn drain_message<P: MtkPort>(&self, port: &mut P, length: u32) -> Result<()> {
-        let mut payload = vec![0u8; length as usize];
+        if length < 4 {
+            return Err(ProtocolError::InvalidResponseLength.into());
+        }
+        let len = usize::try_from(length).map_err(|_| PenumbraError::BufferTooSmall)?;
+        let mut payload = Vec::new();
+        payload.try_reserve(len).map_err(|_| PenumbraError::BufferTooSmall)?;
+        payload.resize(len, 0);
         port.read_exact(&mut payload)?;
 
         let body = String::from_utf8_lossy(&payload[4..]).into_owned();
@@ -304,26 +310,26 @@ impl<'a> XFlash<'a> {
     pub fn download_data_with<R, F, P>(
         &mut self,
         port: &mut P,
-        size: usize,
+        size: u64,
         chunk_size: usize,
         max_timeout: Duration,
         mut reader: R,
         mut progress: F,
-    ) -> Result<usize>
+    ) -> Result<u64>
     where
         P: MtkPort,
         R: Reader,
         F: ProgressCallback,
     {
         let mut buffer = vec![0u8; chunk_size];
-        let mut bytes_written = 0;
+        let mut bytes_written = 0u64;
 
         port.set_timeout(max_timeout)?;
         progress(0, size);
 
         let result = (|| -> Result<()> {
             while bytes_written < size {
-                let to_read = (size - bytes_written).min(chunk_size);
+                let to_read = (size - bytes_written).min(chunk_size as u64) as usize;
                 let chunk = &mut buffer[..to_read];
 
                 reader.read_exact_fill(chunk)?;
@@ -336,7 +342,7 @@ impl<'a> XFlash<'a> {
 
                 self.send_data(port, &[&zero_bytes, &checksum_bytes, chunk])?;
 
-                bytes_written += chunk.len();
+                bytes_written += chunk.len() as u64;
                 progress(bytes_written, size);
                 debug!("Written {}/{} bytes...", bytes_written, size);
             }
@@ -434,7 +440,13 @@ impl<'a> DownloadProtocol for XFlash<'a> {
 
         debug!("[RX] Packet header received: 0x{:X} bytes", hdr.length);
 
-        let mut data = vec![0u8; hdr.length as usize];
+        if hdr.length == 0 {
+            return Ok(Vec::new());
+        }
+        let len = usize::try_from(hdr.length).map_err(|_| PenumbraError::BufferTooSmall)?;
+        let mut data = Vec::new();
+        data.try_reserve(len).map_err(|_| PenumbraError::BufferTooSmall)?;
+        data.resize(len, 0);
         port.read_exact(&mut data)?;
         Ok(data)
     }
@@ -524,10 +536,10 @@ impl<'a> DownloadProtocol for XFlash<'a> {
     fn download_data<R: Reader, F: ProgressCallback, P: MtkPort>(
         &mut self,
         port: &mut P,
-        size: usize,
+        size: u64,
         reader: R,
         progress: F,
-    ) -> Result<usize> {
+    ) -> Result<u64> {
         let chunk_size = self.write_packet_length.unwrap_or(0x8000);
         self.download_data_with(port, size, chunk_size, MAX_TIMEOUT, reader, progress)
     }
@@ -535,11 +547,11 @@ impl<'a> DownloadProtocol for XFlash<'a> {
     fn upload_data<W: Writer, F: ProgressCallback, P: MtkPort>(
         &mut self,
         port: &mut P,
-        size: usize,
+        size: u64,
         mut writer: W,
         mut progress: F,
-    ) -> Result<usize> {
-        let mut bytes_read = 0;
+    ) -> Result<u64> {
+        let mut bytes_read = 0u64;
 
         port.set_timeout(MAX_TIMEOUT)?;
 
@@ -560,7 +572,7 @@ impl<'a> DownloadProtocol for XFlash<'a> {
                 break Err(e.into());
             }
 
-            bytes_read += chunk.len();
+            bytes_read += chunk.len() as u64;
 
             if let Err(e) = self.send(port, &[0u8; 4]) {
                 break Err(e);
@@ -585,7 +597,7 @@ impl<'a> DownloadProtocol for XFlash<'a> {
     fn progress_report<F: ProgressCallback, P: MtkPort>(
         &mut self,
         port: &mut P,
-        size: usize,
+        size: u64,
         mut progress: F,
     ) -> Result<()> {
         port.set_timeout(MAX_TIMEOUT)?;
@@ -633,7 +645,7 @@ impl<'a> DownloadProtocol for XFlash<'a> {
                 break Err(e);
             }
 
-            let progress_bytes = (progress_percent as usize * size) / 100;
+            let progress_bytes = (u64::from(progress_percent) * size) / 100;
             progress(progress_bytes, size);
             debug!("Progress: {}% ({}/{})", progress_percent, progress_bytes, size);
         };
@@ -647,7 +659,7 @@ impl<'a> DownloadProtocol for XFlash<'a> {
         &mut self,
         port: &mut P,
         addr: u64,
-        size: usize,
+        size: u64,
         section: PartitionKind,
         writer: W,
         progress: F,
@@ -659,7 +671,7 @@ impl<'a> DownloadProtocol for XFlash<'a> {
         &mut self,
         port: &mut P,
         addr: u64,
-        size: usize,
+        size: u64,
         section: PartitionKind,
         reader: R,
         progress: F,
@@ -671,7 +683,7 @@ impl<'a> DownloadProtocol for XFlash<'a> {
         &mut self,
         port: &mut P,
         addr: u64,
-        size: usize,
+        size: u64,
         section: PartitionKind,
         progress: F,
     ) -> Result<()> {
@@ -696,7 +708,7 @@ impl<'a> DownloadProtocol for XFlash<'a> {
         &mut self,
         port: &mut P,
         name: &str,
-        size: usize,
+        size: u64,
         reader: R,
         progress: F,
     ) -> Result<()> {
@@ -800,13 +812,13 @@ impl<'a> DownloadProtocol for XFlash<'a> {
         &mut self,
         port: &mut P,
         mut reader: R,
-        size: usize,
+        size: u64,
     ) -> Result<()> {
         let yield_arg = [0u8; 0xF8];
 
         let mut efuse_data = [0u8; 0x42D4];
 
-        if size < efuse_data.len() {
+        if size < efuse_data.len() as u64 {
             return Err(PenumbraError::BufferTooSmall.into());
         }
 
@@ -906,7 +918,7 @@ impl<'a> DownloadProtocolExt for XFlash<'a> {
         self.read_flash(
             port,
             seccfg_part.address,
-            seccfg_data.len(),
+            seccfg_data.len() as u64,
             section,
             seccfg_data.as_mut_slice(),
             NOOP_PROGRESS,
@@ -984,7 +996,7 @@ impl<'a> DownloadProtocolExt for XFlash<'a> {
         self.write_partition(
             port,
             "seccfg",
-            seccfg_data.len(),
+            seccfg_data.len() as u64,
             seccfg_data.as_slice(),
             NOOP_PROGRESS,
         )?;
@@ -1005,7 +1017,7 @@ impl<'a> DownloadProtocolExt for XFlash<'a> {
         &mut self,
         port: &mut P,
         addr: u64,
-        length: usize,
+        length: u64,
         writer: W,
         progress: F,
     ) -> Result<()> {
@@ -1016,7 +1028,7 @@ impl<'a> DownloadProtocolExt for XFlash<'a> {
         &mut self,
         port: &mut P,
         addr: u64,
-        length: usize,
+        length: u64,
         reader: R,
         progress: F,
     ) -> Result<()> {
@@ -1024,13 +1036,13 @@ impl<'a> DownloadProtocolExt for XFlash<'a> {
     }
 
     fn read_register<P: MtkPort>(&mut self, port: &mut P, addr: u64) -> Result<u32> {
-        // TODO: Support 64bit addresses
-        exts::read_register(self, port, addr as u32)
+        let addr32 = u32::try_from(addr).map_err(|_| PenumbraError::ArithmeticOverflow)?;
+        exts::read_register(self, port, addr32)
     }
 
     fn write_register<P: MtkPort>(&mut self, port: &mut P, addr: u64, value: u32) -> Result<()> {
-        // TODO: Support 64bit addresses
-        exts::write_register(self, port, addr as u32, value)
+        let addr32 = u32::try_from(addr).map_err(|_| PenumbraError::ArithmeticOverflow)?;
+        exts::write_register(self, port, addr32, value)
     }
 
     fn read_rpmb<W: Writer, F: ProgressCallback, P: MtkPort>(

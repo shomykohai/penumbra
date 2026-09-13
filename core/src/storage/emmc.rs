@@ -7,7 +7,7 @@ use wincode::{Deserialize, SchemaRead, SchemaWrite};
 use crate::error::Result;
 use crate::storage::{PartitionKind, Storage, StorageType};
 use crate::traits::FromBytes;
-use crate::utils::xml::{get_tag, get_tag_usize};
+use crate::utils::xml::{get_tag, get_tag_hex, get_tag_u64};
 
 /// Represents eMMC storage information.
 #[derive(Default, Debug, SchemaRead, SchemaWrite, Clone, FromBytes)]
@@ -177,16 +177,16 @@ impl Storage for EmmcStorage {
 
 impl EmmcStorage {
     pub fn from_xml(xml: &str) -> Result<Self> {
-        let block_size = get_tag_usize(xml, "emmc/block_size")? as u32;
+        let block_size = get_tag_hex::<u32>(xml, "emmc/block_size")?;
 
-        let boot1_size = get_tag_usize(xml, "emmc/boot1_size")? as u64;
-        let boot2_size = get_tag_usize(xml, "emmc/boot2_size")? as u64;
-        let rpmb_size = get_tag_usize(xml, "emmc/rpmb_size")? as u64;
-        let gp1_size = get_tag_usize(xml, "emmc/gp1_size")? as u64;
-        let gp2_size = get_tag_usize(xml, "emmc/gp2_size")? as u64;
-        let gp3_size = get_tag_usize(xml, "emmc/gp3_size")? as u64;
-        let gp4_size = get_tag_usize(xml, "emmc/gp4_size")? as u64;
-        let user_size = get_tag_usize(xml, "emmc/user_size")? as u64;
+        let boot1_size = get_tag_u64(xml, "emmc/boot1_size")?;
+        let boot2_size = get_tag_u64(xml, "emmc/boot2_size")?;
+        let rpmb_size = get_tag_u64(xml, "emmc/rpmb_size")?;
+        let gp1_size = get_tag_u64(xml, "emmc/gp1_size")?;
+        let gp2_size = get_tag_u64(xml, "emmc/gp2_size")?;
+        let gp3_size = get_tag_u64(xml, "emmc/gp3_size")?;
+        let gp4_size = get_tag_u64(xml, "emmc/gp4_size")?;
+        let user_size = get_tag_u64(xml, "emmc/user_size")?;
 
         let cid_str: String = get_tag(xml, "emmc/id")?;
         let mut cid = [0u8; 16];

@@ -56,7 +56,7 @@ impl DeviceCommand for DownloadArgs {
             return Err(anyhow::anyhow!("Partition '{}' not found on device.", self.partition));
         };
 
-        if file_size > part.size as u64 {
+        if file_size > part.size {
             return Err(anyhow::anyhow!(
                 "File size ({}) exceeds partition size ({}).",
                 file_size,
@@ -71,7 +71,7 @@ impl DeviceCommand for DownloadArgs {
         info!("Downloading to partition '{}'...", part.name);
 
         if let Err(e) =
-            dev.write_partition(&part.name, file_size as usize, &mut reader, &mut progress_callback)
+            dev.write_partition(&part.name, file_size, &mut reader, &mut progress_callback)
         {
             pb.abandon("Download failed!");
             Err(e)?;

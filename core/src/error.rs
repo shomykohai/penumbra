@@ -170,6 +170,14 @@ pub enum PenumbraError {
     PartitionEntryOutOfBounds,
     #[error("Partition {0} not found")]
     PartitionNotFound(String),
+    #[error("Partition size overflow")]
+    PartitionSizeOverflow,
+    #[error("Arithmetic overflow")]
+    ArithmeticOverflow,
+    #[error("Progress overflow")]
+    ProgressOverflow,
+    #[error("Total size overflow")]
+    TotalSizeOverflow,
     #[error("Unsupported storage type")]
     UnsupportedStorage,
     #[error("Invalid RPMB region")]

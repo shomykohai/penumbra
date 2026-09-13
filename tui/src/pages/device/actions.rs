@@ -85,7 +85,7 @@ impl<'a> DeviceIo<'a> {
     pub fn get_image_size(path: &Path, partition: &Partition) -> anyhow::Result<u64> {
         let size = std::fs::metadata(path)?.len();
 
-        if size > partition.size as u64 { Ok(partition.size as u64) } else { Ok(size) }
+        if size > partition.size { Ok(partition.size) } else { Ok(size) }
     }
 
     /// Asks the UI to open the file explorer to let the user pick a file or directory.
@@ -188,7 +188,7 @@ impl DeviceAction for ReadPartition {
             return Ok(false);
         };
 
-        let total_bytes: u64 = partitions.iter().map(|p| p.size as u64).sum();
+        let total_bytes: u64 = partitions.iter().map(|p| p.size).sum();
         let mut bytes_done: u64 = 0;
 
         io.progress_start(total_bytes, "Reading partitions...");
@@ -202,10 +202,10 @@ impl DeviceAction for ReadPartition {
             let reporter = reporter.clone();
 
             dev.read_partition(&partition.name, &mut writer, move |written, _total| {
-                reporter.update(bytes_done + written as u64, Some(format!("Reading '{name}'...")));
+                reporter.update(bytes_done + written, Some(format!("Reading '{name}'...")));
             })?;
 
-            bytes_done += partition.size as u64;
+            bytes_done += partition.size;
         }
 
         io.progress_finish("Partition read complete.");
@@ -250,15 +250,9 @@ impl DeviceAction for WritePartition {
             let name = partition.name.clone();
             let reporter = reporter.clone();
 
-            dev.write_partition(
-                &partition.name,
-                *size as usize,
-                &mut reader,
-                move |written, _total| {
-                    reporter
-                        .update(bytes_done + written as u64, Some(format!("Flashing '{name}'...")));
-                },
-            )?;
+            dev.write_partition(&partition.name, *size, &mut reader, move |written, _total| {
+                reporter.update(bytes_done + written, Some(format!("Flashing '{name}'...")));
+            })?;
 
             bytes_done += size;
         }
@@ -282,7 +276,7 @@ impl DeviceAction for ErasePartition {
     fn run(&self, dev: &mut Device<'_, PortType>, io: &DeviceIo<'_>) -> anyhow::Result<bool> {
         let Some(partitions) = io.ask_partitions() else { return Ok(false) };
 
-        let total_bytes: u64 = partitions.iter().map(|p| p.size as u64).sum();
+        let total_bytes: u64 = partitions.iter().map(|p| p.size).sum();
         let mut bytes_done: u64 = 0;
 
         io.progress_start(total_bytes, "Erasing partitions...");
@@ -293,10 +287,10 @@ impl DeviceAction for ErasePartition {
             let reporter = reporter.clone();
 
             dev.erase_partition(&partition.name, move |written, _total| {
-                reporter.update(bytes_done + written as u64, Some(format!("Erasing '{name}'...")));
+                reporter.update(bytes_done + written, Some(format!("Erasing '{name}'...")));
             })?;
 
-            bytes_done += partition.size as u64;
+            bytes_done += partition.size;
         }
 
         io.progress_finish("Partition erase complete.");
@@ -321,7 +315,7 @@ impl DeviceAction for DumpAllPartitions {
 
         // We skip userdata since it's too big and not something people usually want to dump.
         // If someone really wants to do it, there's always the "Read Partition" action.
-        let total_bytes: u64 = partitions.iter().map(|p| p.size as u64).sum();
+        let total_bytes: u64 = partitions.iter().map(|p| p.size).sum();
         let mut bytes_done: u64 = 0;
 
         io.progress_start(total_bytes, "Dumping all partitions...");
@@ -335,10 +329,10 @@ impl DeviceAction for DumpAllPartitions {
             let reporter = reporter.clone();
 
             dev.read_partition(&partition.name, &mut writer, move |written, _total| {
-                reporter.update(bytes_done + written as u64, Some(format!("Dumping '{name}'...")));
+                reporter.update(bytes_done + written, Some(format!("Dumping '{name}'...")));
             })?;
 
-            bytes_done += partition.size as u64;
+            bytes_done += partition.size;
         }
 
         io.progress_finish("All partitions dumped.");
@@ -394,15 +388,9 @@ impl DeviceAction for WriteAllPartitions {
             let name = partition.name.clone();
             let reporter = reporter.clone();
 
-            dev.write_partition(
-                &partition.name,
-                *size as usize,
-                &mut reader,
-                move |written, _total| {
-                    reporter
-                        .update(bytes_done + written as u64, Some(format!("Flashing '{name}'...")));
-                },
-            )?;
+            dev.write_partition(&partition.name, *size, &mut reader, move |written, _total| {
+                reporter.update(bytes_done + written, Some(format!("Flashing '{name}'...")));
+            })?;
 
             bytes_done += size;
         }
@@ -444,7 +432,7 @@ impl DeviceAction for ReadRpmb {
         io.progress_start(rpmb_size as u64, "Reading RPMB...");
 
         dev.read_rpmb(RpmbRegion::R0, 0, sectors, writer, move |written, _total| {
-            reporter.update(written as u64, None);
+            reporter.update(written, None);
         })?;
 
         io.progress_finish(format!("Finished reading RPMB, saved to {}", file_name));
@@ -479,7 +467,7 @@ impl DeviceAction for WriteRpmb {
         io.progress_start(rpmb_size as u64, "Writing RPMB...");
 
         dev.write_rpmb(RpmbRegion::R0, 0, sectors, reader, move |written, _total| {
-            reporter.update(written as u64, None);
+            reporter.update(written, None);
         })?;
 
         io.progress_finish("Finished writing RPMB.");
@@ -507,7 +495,7 @@ impl DeviceAction for EraseRpmb {
         io.progress_start(rpmb_size as u64, "Erasing RPMB...");
 
         dev.erase_rpmb(RpmbRegion::R0, 0, sectors, move |written, _total| {
-            reporter.update(written as u64, None);
+            reporter.update(written, None);
         })?;
 
         io.progress_finish("Finished erasing RPMB.");
@@ -545,18 +533,18 @@ impl DeviceAction for FlashScatter {
         let event_tx = io.event_tx.clone();
         let activity = io.activity_handle();
 
-        let progress_callback = move |curr: usize, total: usize| {
+        let progress_callback = move |curr: u64, total: u64| {
             if !started {
                 let _ = event_tx.send(DeviceEvent::ProgressStart {
-                    total_bytes: total as u64,
+                    total_bytes: total,
                     message: "Flashing from scatter file...".into(),
                 });
                 started = true;
             }
 
             let _ = event_tx.send(DeviceEvent::ProgressUpdate {
-                written: curr as u64,
-                total: Some(total as u64),
+                written: curr,
+                total: Some(total),
                 message: activity.current().detail(),
             });
         };

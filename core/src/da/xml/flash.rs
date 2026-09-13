@@ -44,7 +44,7 @@ pub fn read_flash<P, W, F>(
     xml: &mut Xml,
     port: &mut P,
     addr: u64,
-    size: usize,
+    size: u64,
     section: PartitionKind,
     writer: W,
     progress: F,
@@ -69,7 +69,7 @@ pub fn write_flash<P, R, F>(
     xml: &mut Xml,
     port: &mut P,
     addr: u64,
-    size: usize,
+    size: u64,
     section: PartitionKind,
     reader: R,
     progress: F,
@@ -96,7 +96,7 @@ pub fn erase_flash<P, F>(
     xml: &mut Xml,
     port: &mut P,
     addr: u64,
-    size: usize,
+    size: u64,
     section: PartitionKind,
     progress: F,
 ) -> Result<()>
@@ -142,7 +142,7 @@ pub fn write_partition<P, R, F>(
     xml: &mut Xml,
     port: &mut P,
     part_name: &str,
-    size: usize,
+    size: u64,
     mut reader: R,
     mut progress: F,
 ) -> Result<()>
@@ -263,14 +263,14 @@ where
 
     xmlcmd!(xml, port, FlashUpdate)?;
 
-    xml.download_data(port, scatter.len(), scatter.as_bytes(), NOOP_PROGRESS)?;
+    xml.download_data(port, scatter.len() as u64, scatter.as_bytes(), NOOP_PROGRESS)?;
 
     let mut total_bytes = 0u64;
     for part in parts.iter().filter(|p| p.download) {
         if let Some(path) = &part.path
             && let Ok((_, size)) = reader_source(&path.to_string_lossy())
         {
-            total_bytes += size as u64;
+            total_bytes = total_bytes.checked_add(size).ok_or(PenumbraError::TotalSizeOverflow)?;
         }
     }
 
@@ -286,7 +286,8 @@ where
             .to_owned()
     };
 
-    progress(0, total_bytes as usize);
+    let total = total_bytes;
+    progress(0, total);
 
     loop {
         let resp = xml.read_data(port)?;
@@ -312,8 +313,8 @@ where
 
         debug!("Received {} command.", cmd);
 
-        let mut file_progress = |file_written: usize, _file_total: usize| {
-            progress((global_written + file_written as u64) as usize, total_bytes as usize);
+        let mut file_progress = |file_written: u64, _file_total: u64| {
+            progress(global_written.saturating_add(file_written), total);
         };
 
         match cmd.as_str() {
@@ -336,7 +337,8 @@ where
 
                 xml.process_download_data(port, &resp, size, timeout, reader, &mut file_progress)?;
 
-                global_written += size as u64;
+                global_written =
+                    global_written.checked_add(size).ok_or(PenumbraError::TotalSizeOverflow)?;
 
                 // The DA, after writing a sparse image, will hang for a few seconds, more than
                 // the default MIN_TIMEOUT.
@@ -376,13 +378,20 @@ where
                             if let Some(part) =
                                 parts.iter().find(|part| part.part.name == part_name)
                             {
-                                total_bytes += part.part.size as u64 * 2;
+                                total_bytes = total_bytes
+                                    .checked_add(
+                                        part.part
+                                            .size
+                                            .checked_mul(2)
+                                            .ok_or(PenumbraError::TotalSizeOverflow)?,
+                                    )
+                                    .ok_or(PenumbraError::TotalSizeOverflow)?;
                             }
                         }
 
                         rcd = Some(parsed_record);
 
-                        progress((global_written + bytes as u64) as usize, total_bytes as usize);
+                        progress(global_written.saturating_add(bytes), total_bytes);
                     }
 
                     bytes
@@ -392,7 +401,9 @@ where
                     xml.process_upload_data(port, &resp, writer, &mut file_progress)?
                 };
 
-                global_written += uploaded_bytes as u64;
+                global_written = global_written
+                    .checked_add(uploaded_bytes)
+                    .ok_or(PenumbraError::TotalSizeOverflow)?;
             }
             CMD_PROGRESS_REPORT => {
                 let message = get_tag::<String>(&resp, "arg/message").unwrap_or_default();

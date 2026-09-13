@@ -43,8 +43,8 @@ impl DeviceCommand for KeysArgs {
 
         let mut pubk = [0u8; 0x20];
         let mut hrid = [0u8; 0x10];
-        dev.peek(pubk_fuse, size_of_val(&pubk), &mut pubk[..], progress)?;
-        dev.peek(hrid_fuse, size_of_val(&hrid), &mut hrid[..], progress)?;
+        dev.peek(pubk_fuse, size_of_val(&pubk) as u64, &mut pubk[..], progress)?;
+        dev.peek(hrid_fuse, size_of_val(&hrid) as u64, &mut hrid[..], progress)?;
 
         let sec_fuse_val = dev.read_register(sec_fuse)?;
         let rpmb_key = dev.derive_key_by_id(KeyDeriveId::Rpmb, KeySize::Key256)?;

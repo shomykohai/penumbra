@@ -20,7 +20,7 @@ pub const CMD_FILE_SYSTEM_OP: &str = "CMD:FILE-SYS-OPERATION";
 pub enum FileSystemOp {
     MkDir,
     Exists,
-    FileSize(usize),
+    FileSize(u64),
     RemoveAll,
     Remove,
 }
@@ -56,7 +56,7 @@ impl From<&str> for FileSystemOp {
             "NOT-EXISTS" => Self::Exists,
             "REMOVE-ALL" => Self::RemoveAll,
             "REMOVE" => Self::Remove,
-            _ => usize::from_str_radix(s, 16).map_or(Self::Exists, Self::FileSize),
+            _ => u64::from_str_radix(s, 16).map_or(Self::Exists, Self::FileSize),
         }
     }
 }
@@ -172,7 +172,7 @@ pub struct ReadFlash {
     #[xml(tag = "target_file", fmt = "{partition}")]
     target_file: String,
     #[xml(tag = "length", fmt = "0x{length:X}")]
-    length: usize,
+    length: u64,
     #[xml(tag = "offset", fmt = "0x{offset:X}")]
     offset: u64,
 }
@@ -191,7 +191,7 @@ pub struct WriteFlash {
     #[xml(tag = "partition")]
     partition: String,
     #[xml(tag = "source_file", fmt = "MEM:\\0x0:0x{length:X}")]
-    length: usize,
+    length: u64,
     #[xml(tag = "offset", fmt = "0x{offset:X}")]
     offset: u64,
 }
@@ -207,7 +207,7 @@ pub struct EraseFlash {
     #[xml(tag = "partition")]
     section: String,
     #[xml(tag = "length", fmt = "0x{length:X}")]
-    length: usize,
+    length: u64,
     #[xml(tag = "offset", fmt = "0x{offset:X}")]
     offset: u64,
 }

@@ -1824,6 +1824,7 @@ dependencies = [
  "md5",
  "memchr",
  "num-bigint",
+ "num-traits",
  "num_enum",
  "nusb",
  "penumbra-macros",
