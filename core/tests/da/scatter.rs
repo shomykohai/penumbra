@@ -1,11 +1,79 @@
 use penumbra_mtk::da::{ScatterFile, ScatterOp, ScatterPartition};
-use penumbra_mtk::storage::EmmcPartition;
-use penumbra_mtk::{Partition, PartitionKind, StorageType};
+use penumbra_mtk::storage::{EmmcPartition, EmmcStorage};
+use penumbra_mtk::traits::FromBytes;
+use penumbra_mtk::{Partition, PartitionKind, Storage, StorageKind, StorageType};
 
 const YAML_SCATTER: &'static str = include_str!("../files/da/MT6768_Android_scatter.txt");
 const YAML_SCATTER_NEW: &'static str = include_str!("../files/da/MT6993_Android_scatter.txt");
 const XML_SCATTER: &'static str = include_str!("../files/da/MT6768_Android_scatter.xml");
 const XML_SCATTER_NEW: &'static str = include_str!("../files/da/MT6993_Android_scatter.xml");
+
+#[test]
+fn test_resized_reserved_oversize_keeps_address() {
+    const EMMC_RESP: &[u8] = include_bytes!("../files/storage/emmc_resp.bin");
+    let storage =
+        StorageKind::Emmc(EmmcStorage::from_bytes(EMMC_RESP).expect("storage should parse"));
+    let user_size = storage.get_user_size();
+    let sentinel = 0xFFFF0000u64;
+    let part = ScatterPartition::new(
+        Partition {
+            name: "userdata".into(),
+            address: sentinel,
+            size: user_size + 0x1000,
+            kind: PartitionKind::Emmc(EmmcPartition::User),
+        },
+        None,
+        ScatterOp::Reserved,
+        false,
+        StorageType::Emmc,
+        None,
+    );
+    let file = ScatterFile { parts: vec![part] };
+    let out = file.partitions_resized(&storage);
+    assert_eq!(out.len(), 1);
+    assert_eq!(out[0].part.address, sentinel);
+    assert_eq!(out[0].part.size, user_size + 0x1000);
+}
+
+#[test]
+fn test_resized_unordered_keeps_size() {
+    const EMMC_RESP: &[u8] = include_bytes!("../files/storage/emmc_resp.bin");
+    let storage =
+        StorageKind::Emmc(EmmcStorage::from_bytes(EMMC_RESP).expect("storage should parse"));
+    let first = ScatterPartition::new(
+        Partition {
+            name: "userdata".into(),
+            address: 0x5000,
+            size: 0x1000,
+            kind: PartitionKind::Emmc(EmmcPartition::User),
+        },
+        None,
+        ScatterOp::NeedResize,
+        false,
+        StorageType::Emmc,
+        None,
+    );
+    let second = ScatterPartition::new(
+        Partition {
+            name: "cache".into(),
+            address: 0x4000,
+            size: 0x1000,
+            kind: PartitionKind::Emmc(EmmcPartition::User),
+        },
+        None,
+        ScatterOp::Update,
+        false,
+        StorageType::Emmc,
+        None,
+    );
+    let file = ScatterFile { parts: vec![first, second] };
+    let out = file.partitions_resized(&storage);
+    assert_eq!(out.len(), 2);
+    assert_eq!(out[0].part.address, 0x5000);
+    assert_eq!(out[0].part.size, 0x1000);
+    assert_eq!(out[1].part.address, 0x4000);
+    assert_eq!(out[1].part.size, 0x1000);
+}
 
 #[test]
 fn test_yaml_old_scatter() {
@@ -59,7 +127,10 @@ fn test_scatter_partition_flags() {
     assert!(part.need_resize());
 
     part.op = ScatterOp::Reserved;
-    assert!(!part.is_reserved(), "Reserved should be false if address & 0xFFFF0000 != 0xFFFF0000");
+    assert!(
+        !part.is_reserved(),
+        "Reserved should evaluate to false if op is Reserved and address & 0xFFFF0000 != 0xFFFF0000"
+    );
 }
 
 #[test]
