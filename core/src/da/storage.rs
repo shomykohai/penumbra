@@ -7,9 +7,9 @@ use crate::storage::gpt::{GPT_SIZE, MAX_GPT_PARTS};
 use crate::{DownloadProtocol, Gpt, MtkPort, Partition, Storage, StorageKind};
 
 pub(super) fn get_aux_gpt_parts(storage: &StorageKind) -> [Partition; 2] {
-    let pl1_size = storage.get_pl1_size() as usize;
+    let pl1_size = storage.get_pl1_size();
     let pl1_part = storage.get_pl_part1();
-    let pl2_size = storage.get_pl2_size() as usize;
+    let pl2_size = storage.get_pl2_size();
     let pl2_part = storage.get_pl_part2();
 
     [
@@ -30,9 +30,14 @@ pub(super) fn get_gpt_parts<P: MtkPort, D: DownloadProtocol>(
 
     let mut gpt_parts = Vec::with_capacity(MAX_GPT_PARTS + 2);
 
-    let pgpt = Partition::new("PGPT", gpt_size, 0, user_section);
+    let pgpt = Partition::new("PGPT", gpt_size as u64, 0, user_section);
 
-    let sgpt = Partition::new("SGPT", gpt_size, user_size - gpt_size as u64, user_section);
+    let sgpt = Partition::new(
+        "SGPT",
+        gpt_size as u64,
+        user_size.checked_sub(gpt_size as u64).unwrap_or(user_size),
+        user_section,
+    );
 
     gpt_parts.push(pgpt);
 
@@ -50,7 +55,9 @@ pub(super) fn get_gpt_parts<P: MtkPort, D: DownloadProtocol>(
         }
     }
 
-    gpt_parts.push(sgpt);
+    if user_size >= gpt_size as u64 {
+        gpt_parts.push(sgpt);
+    }
 
     gpt_parts
 }

@@ -4,6 +4,7 @@
 */
 use std::str::FromStr;
 
+use num_traits::Num;
 use simple_xml;
 
 use crate::error::{Error, Result};
@@ -36,10 +37,17 @@ where
 }
 
 pub fn get_tag_usize(xml: &str, path: &str) -> Result<usize> {
+    get_tag_hex(xml, path)
+}
+
+pub fn get_tag_u64(xml: &str, path: &str) -> Result<u64> {
+    get_tag_hex(xml, path)
+}
+
+pub fn get_tag_hex<N: Num>(xml: &str, path: &str) -> Result<N> {
     let raw_value: String = get_tag(xml, path)?;
-
-    let trimmed = raw_value.trim_start_matches("0x");
-
-    usize::from_str_radix(trimmed, 16)
+    let trimmed =
+        raw_value.strip_prefix("0x").or_else(|| raw_value.strip_prefix("0X")).unwrap_or(&raw_value);
+    N::from_str_radix(trimmed, 16)
         .map_err(|_| Error::ParseError(format!("Failed to parse hex XML tag `{}`", path)))
 }

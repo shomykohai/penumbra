@@ -23,7 +23,7 @@ use crate::{BootMode, Partition, Result};
 /// MAGIC value for V5/V6 packets.
 pub const MAGIC: u32 = 0xFEEEEEEF;
 /// Bad design choices require bad workarounds.
-pub const NOOP_PROGRESS: fn(usize, usize) = |_, _| {};
+pub const NOOP_PROGRESS: fn(u64, u64) = |_, _| {};
 // On some devices, the DA will hang while writing a sparse image (or just lag generally a lot),
 // even with the generous timeout of 10s. To account for this, a longer timeout can help the
 // unnecessary failures.
@@ -137,10 +137,10 @@ pub trait DownloadProtocol {
     fn download_data<R: Reader, F: ProgressCallback, P: MtkPort>(
         &mut self,
         port: &mut P,
-        size: usize,
+        size: u64,
         reader: R,
         progress: F,
-    ) -> Result<usize>;
+    ) -> Result<u64>;
 
     /* Receives data from the device in chunks, with progress reporting,
      * using the protocol specific loop logic.
@@ -148,10 +148,10 @@ pub trait DownloadProtocol {
     fn upload_data<W: Writer, F: ProgressCallback, P: MtkPort>(
         &mut self,
         port: &mut P,
-        size: usize,
+        size: u64,
         writer: W,
         progress: F,
-    ) -> Result<usize>;
+    ) -> Result<u64>;
 
     /* Reports progress to the device, using the protocol specific loop logic.
      * This is used for operations that don't involve data transfer, but still need to report
@@ -160,7 +160,7 @@ pub trait DownloadProtocol {
     fn progress_report<F: ProgressCallback, P: MtkPort>(
         &mut self,
         port: &mut P,
-        size: usize,
+        size: u64,
         progress: F,
     ) -> Result<()>;
 
@@ -171,7 +171,7 @@ pub trait DownloadProtocol {
         &mut self,
         port: &mut P,
         addr: u64,
-        size: usize,
+        size: u64,
         section: PartitionKind,
         writer: W,
         progress: F,
@@ -182,7 +182,7 @@ pub trait DownloadProtocol {
         &mut self,
         port: &mut P,
         addr: u64,
-        size: usize,
+        size: u64,
         section: PartitionKind,
         reader: R,
         progress: F,
@@ -193,7 +193,7 @@ pub trait DownloadProtocol {
         &mut self,
         port: &mut P,
         addr: u64,
-        size: usize,
+        size: u64,
         section: PartitionKind,
         progress: F,
     ) -> Result<()>;
@@ -212,7 +212,7 @@ pub trait DownloadProtocol {
         &mut self,
         port: &mut P,
         name: &str,
-        size: usize,
+        size: u64,
         reader: R,
         progress: F,
     ) -> Result<()>;
@@ -256,7 +256,7 @@ pub trait DownloadProtocol {
         &mut self,
         port: &mut P,
         reader: R,
-        size: usize,
+        size: u64,
     ) -> Result<()>;
 
     /* Security */
@@ -301,7 +301,7 @@ pub trait DownloadProtocolExt {
         &mut self,
         port: &mut P,
         addr: u64,
-        length: usize,
+        length: u64,
         writer: W,
         progress: F,
     ) -> Result<()>;
@@ -311,7 +311,7 @@ pub trait DownloadProtocolExt {
         &mut self,
         port: &mut P,
         addr: u64,
-        length: usize,
+        length: u64,
         reader: R,
         progress: F,
     ) -> Result<()>;

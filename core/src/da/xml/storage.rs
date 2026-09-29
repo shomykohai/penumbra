@@ -21,14 +21,16 @@ pub fn detect_storage<P: MtkPort>(xml: &mut Xml, port: &mut P) -> Option<Storage
     match storage_str.as_str() {
         "EMMC" => {
             debug!("eMMC storage detected.");
-            if let Ok(storage) = EmmcStorage::from_xml(&reponse) {
-                return Some(StorageKind::Emmc(storage));
+            match EmmcStorage::from_xml(&reponse) {
+                Ok(storage) => return Some(StorageKind::Emmc(storage)),
+                Err(e) => debug!("Failed to parse eMMC HW-INFO response: {e}\n{reponse}"),
             }
         }
         "UFS" => {
             debug!("UFS storage detected.");
-            if let Ok(storage) = UfsStorage::from_xml(&reponse) {
-                return Some(StorageKind::Ufs(storage));
+            match UfsStorage::from_xml(&reponse) {
+                Ok(storage) => return Some(StorageKind::Ufs(storage)),
+                Err(e) => debug!("Failed to parse UFS HW-INFO response: {e}\n{reponse}"),
             }
         }
         _ => {}

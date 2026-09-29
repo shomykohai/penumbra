@@ -31,6 +31,8 @@ pub enum Error {
     /// In particular with the connection backends
     #[error("I/O Error: {0}")]
     Io(#[from] std::io::Error),
+    #[error("Arithmetic overflow")]
+    ArithmeticOverflow,
     /// Error specific related to timeouts.
     /// Use this preferrably over the generic Io error when
     /// dealing with timeouts, so that we can handle them
@@ -170,6 +172,12 @@ pub enum PenumbraError {
     PartitionEntryOutOfBounds,
     #[error("Partition {0} not found")]
     PartitionNotFound(String),
+    #[error("Partition size overflow")]
+    PartitionSizeOverflow,
+    #[error("Progress overflow")]
+    ProgressOverflow,
+    #[error("Total size overflow")]
+    TotalSizeOverflow,
     #[error("Unsupported storage type")]
     UnsupportedStorage,
     #[error("Invalid RPMB region")]

@@ -482,11 +482,10 @@ impl<'a, P: MtkPort> Device<'a, P> {
     ///     };
     ///
     ///     let file = std::fs::File::open("path/to/rsc/file").expect("Failed to open RSC file");
-    ///     let file_size = std::fs::metadata("path/to/rsc/file")
-    ///         .expect("Failed to get RSC file metadata")
-    ///         .len() as usize;
+    ///     let file_size =
+    ///         std::fs::metadata("path/to/rsc/file").expect("Failed to get RSC file metadata").len();
     ///     let mut reader = std::io::BufReader::new(file);
-    ///     let mut progress = |written: usize, total: usize| {
+    ///     let mut progress = |written: u64, total: u64| {
     ///         println!("Written: {}/{}", written, total);
     ///     };
     ///
@@ -676,7 +675,7 @@ impl<'a, P: MtkPort> Device<'a, P> {
     ///
     /// let file = File::create("boot.img")?;
     /// let mut writer = BufWriter::new(file);
-    /// let mut progress = |read: usize, total: usize| {
+    /// let mut progress = |read: u64, total: u64| {
     ///     println!("Read {}/{}", read, total);
     /// };
     /// device.read_flash("boot", &mut writer, &mut progress)?;
@@ -712,7 +711,7 @@ impl<'a, P: MtkPort> Device<'a, P> {
     /// # let mut device = DeviceBuilder::new(mtk_port).build()?;
     /// # device.init()?;
     /// let firmware_data = std::fs::read("boot.img")?;
-    /// let mut progress = |written: usize, total: usize| {
+    /// let mut progress = |written: u64, total: u64| {
     ///     println!("Written {}/{}", written, total);
     /// };
     /// device.write_flash("boot", firmware_data.as_slice(), &mut progress)?;
@@ -753,7 +752,7 @@ impl<'a, P: MtkPort> Device<'a, P> {
     /// let mut device = DeviceBuilder::new(mtk_port).with_da_data(&da_data).build()?;
     ///
     /// device.init()?;
-    /// let mut progress = |erased: usize, total: usize| {
+    /// let mut progress = |erased: u64, total: u64| {
     ///     println!("Erased: {}/{}", erased, total);
     /// };
     /// device.erase_flash("userdata", &mut progress)?;
@@ -795,7 +794,7 @@ impl<'a, P: MtkPort> Device<'a, P> {
     ///
     /// device.init()?;
     ///
-    /// let mut progress = |read: usize, total: usize| {
+    /// let mut progress = |read: u64, total: u64| {
     ///     println!("Read: {}/{}", read, total);
     /// };
     /// let mut preloader_data = Vec::new();
@@ -812,7 +811,7 @@ impl<'a, P: MtkPort> Device<'a, P> {
     pub fn read_offset<W, F>(
         &mut self,
         address: u64,
-        size: usize,
+        size: u64,
         section: PartitionKind,
         writer: W,
         progress: F,
@@ -849,12 +848,12 @@ impl<'a, P: MtkPort> Device<'a, P> {
     ///
     /// let preloader_data =
     ///     std::fs::read("path/to/preloader_penangf.bin").expect("Failed to read preloader");
-    /// let mut progress = |written: usize, total: usize| {
+    /// let mut progress = |written: u64, total: u64| {
     ///     println!("Written: {}/{}", written, total);
     /// };
     /// device.write_offset(
     ///     0x1000, // Actual preloader offset is 0x0, but we skip the header to ensure correct writing
-    ///     preloader_data.len(),
+    ///     preloader_data.len() as u64,
     ///     PartitionKind::Emmc(EmmcPartition::Boot1),
     ///     preloader_data.as_slice(),
     ///     &mut progress,
@@ -865,7 +864,7 @@ impl<'a, P: MtkPort> Device<'a, P> {
     pub fn write_offset<R, F>(
         &mut self,
         address: u64,
-        size: usize,
+        size: u64,
         section: PartitionKind,
         reader: R,
         progress: F,
@@ -899,7 +898,7 @@ impl<'a, P: MtkPort> Device<'a, P> {
     /// let mut device = DeviceBuilder::new(mtk_port).with_da_data(&da_data).build()?;
     ///
     /// device.init()?;
-    /// let mut progress = |erased: usize, total: usize| {
+    /// let mut progress = |erased: u64, total: u64| {
     ///     println!("Erased: {}/{}", erased, total);
     /// };
     /// device.erase_offset(0x0, 0x40000, PartitionKind::Emmc(EmmcPartition::Boot1), &mut progress)?;
@@ -909,7 +908,7 @@ impl<'a, P: MtkPort> Device<'a, P> {
     pub fn erase_offset<F>(
         &mut self,
         address: u64,
-        size: usize,
+        size: u64,
         section: PartitionKind,
         progress: F,
     ) -> Result<()>
@@ -945,17 +944,22 @@ impl<'a, P: MtkPort> Device<'a, P> {
     ///
     /// device.init()?;
     /// let firmware_data = std::fs::read("logo.bin").expect("Failed to read firmware");
-    /// let mut progress = |written: usize, total: usize| {
+    /// let mut progress = |written: u64, total: u64| {
     ///     println!("Written: {}/{}", written, total);
     /// };
-    /// device.write_partition("logo", firmware_data.len(), firmware_data.as_slice(), &mut progress)?;
+    /// device.write_partition(
+    ///     "logo",
+    ///     firmware_data.len() as u64,
+    ///     firmware_data.as_slice(),
+    ///     &mut progress,
+    /// )?;
     /// Ok(())
     /// # }
     /// ```
     pub fn write_partition<R, F>(
         &mut self,
         partition: &str,
-        size: usize,
+        size: u64,
         reader: R,
         progress: F,
     ) -> Result<()>
@@ -995,7 +999,7 @@ impl<'a, P: MtkPort> Device<'a, P> {
     /// // Readsback "logo" partition to "logo.bin"
     /// let file = File::create("logo.bin")?;
     /// let mut writer = BufWriter::new(file);
-    /// let mut progress = |written: usize, total: usize| {
+    /// let mut progress = |written: u64, total: u64| {
     ///     println!("Written: {}/{}", written, total);
     /// };
     /// device.read_partition("logo", &mut writer, &mut progress)?;
@@ -1030,7 +1034,7 @@ impl<'a, P: MtkPort> Device<'a, P> {
     /// let mut device = DeviceBuilder::new(mtk_port).with_da_data(&da_data).build()?;
     ///
     /// device.init()?;
-    /// let mut progress = |erased: usize, total: usize| {
+    /// let mut progress = |erased: u64, total: u64| {
     ///     println!("Erased: {}/{}", erased, total);
     /// };
     /// device.erase_partition("userdata", &mut progress)?;
@@ -1069,7 +1073,7 @@ impl<'a, P: MtkPort> Device<'a, P> {
     ///
     /// let reader_source = |path: &str| {
     ///     let file = File::open(path)?;
-    ///     let size = file.metadata()?.len() as usize;
+    ///     let size = file.metadata()?.len();
     ///     Ok((BufReader::new(file), size))
     /// };
     ///
@@ -1183,11 +1187,11 @@ impl<'a, P: MtkPort> Device<'a, P> {
     /// # let mut device = DeviceBuilder::new(mtk_port).build()?;
     /// # device.init()?;
     /// let efuse_data = std::fs::read("efuses.bin")?;
-    /// device.write_efuses(efuse_data.as_slice(), efuse_data.len())?;
+    /// device.write_efuses(efuse_data.as_slice(), efuse_data.len() as u64)?;
     /// # Ok(())
     /// # }
     /// ```
-    pub fn write_efuses<R: Reader>(&mut self, reader: R, size: usize) -> Result<()> {
+    pub fn write_efuses<R: Reader>(&mut self, reader: R, size: u64) -> Result<()> {
         self.ensure_da_mode()?;
 
         let protocol = self.protocol.as_mut().unwrap();
@@ -1256,14 +1260,14 @@ impl<'a, P: MtkPort> Device<'a, P> {
     /// # let mut device = DeviceBuilder::new(mtk_port).build()?;
     /// # device.init()?;
     /// let mut buffer = Vec::new();
-    /// let mut progress = |read: usize, total: usize| {
+    /// let mut progress = |read: u64, total: u64| {
     ///     println!("Read: {}/{}", read, total);
     /// };
     /// device.peek(0x100000, 1024, &mut buffer, &mut progress)?;
     /// # Ok(())
     /// # }
     /// ```
-    pub fn peek<W, F>(&mut self, addr: u64, size: usize, writer: W, progress: F) -> Result<()>
+    pub fn peek<W, F>(&mut self, addr: u64, size: u64, writer: W, progress: F) -> Result<()>
     where
         W: Writer,
         F: ProgressCallback,
@@ -1285,14 +1289,14 @@ impl<'a, P: MtkPort> Device<'a, P> {
     /// # let mut device = DeviceBuilder::new(mtk_port).build()?;
     /// # device.init()?;
     /// let payload = vec![0x44; 1024]; // 1kb of As
-    /// let mut progress = |written: usize, total: usize| {
+    /// let mut progress = |written: u64, total: u64| {
     ///     println!("Written: {}/{}", written, total);
     /// };
-    /// device.poke(0x100000, payload.len(), payload.as_slice(), &mut progress)?;
+    /// device.poke(0x100000, payload.len() as u64, payload.as_slice(), &mut progress)?;
     /// # Ok(())
     /// # }
     /// ```
-    pub fn poke<R, F>(&mut self, addr: u64, size: usize, reader: R, progress: F) -> Result<()>
+    pub fn poke<R, F>(&mut self, addr: u64, size: u64, reader: R, progress: F) -> Result<()>
     where
         R: Reader,
         F: ProgressCallback,
@@ -1358,7 +1362,7 @@ impl<'a, P: MtkPort> Device<'a, P> {
     /// # device.init()?;
     /// use penumbra_mtk::storage::RpmbRegion;
     /// let mut buffer = Vec::new();
-    /// let mut progress = |read: usize, total: usize| {
+    /// let mut progress = |read: u64, total: u64| {
     ///     println!("Read: {}/{}", read, total);
     /// };
     /// // Read 1 sector from region 0 of RPMB starting from sector 0
@@ -1396,7 +1400,7 @@ impl<'a, P: MtkPort> Device<'a, P> {
     /// # device.init()?;
     /// use penumbra_mtk::storage::RpmbRegion;
     /// let payload = vec![0u8; 512]; // 1 sector
-    /// let mut progress = |written: usize, total: usize| {
+    /// let mut progress = |written: u64, total: u64| {
     ///     println!("Written: {}/{}", written, total);
     /// };
     /// device.write_rpmb(RpmbRegion::R0, 0, 1, payload.as_slice(), &mut progress)?;
@@ -1431,7 +1435,7 @@ impl<'a, P: MtkPort> Device<'a, P> {
     /// # let mut device = DeviceBuilder::new(mtk_port).build()?;
     /// # device.init()?;
     /// use penumbra_mtk::storage::RpmbRegion;
-    /// let mut progress = |written: usize, total: usize| {
+    /// let mut progress = |written: u64, total: u64| {
     ///     println!("Erased: {}/{}", written, total);
     /// };
     /// device.erase_rpmb(RpmbRegion::R0, 0, 1, &mut progress)?;
