@@ -23,8 +23,8 @@ pub struct WriteOffArgs {
     #[clap(value_parser=maybe_hex::<u64>)]
     pub address: u64,
     /// The number of bytes to write.
-    #[clap(value_parser=maybe_hex::<usize>)]
-    pub length: usize,
+    #[clap(value_parser=maybe_hex::<u64>)]
+    pub length: u64,
     /// The input file
     pub input_file: PathBuf,
 }

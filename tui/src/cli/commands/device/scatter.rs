@@ -49,9 +49,9 @@ impl DeviceCommand for ScatterArgs {
 
         let progress_bar = AntumbraProgress::new(0);
 
-        let progress_callback = move |curr: usize, total: usize| {
-            progress_bar.set_total(total as u64);
-            progress_bar.update(curr as u64, "Flashing device...");
+        let progress_callback = move |curr: u64, total: u64| {
+            progress_bar.set_total(total);
+            progress_bar.update(curr, "Flashing device...");
 
             if curr >= total && total > 0 {
                 progress_bar.finish("");

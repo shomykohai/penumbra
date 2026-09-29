@@ -93,7 +93,7 @@ impl DeviceCommand for EfuseArgs {
                 }
 
                 let reader = File::open(file)?;
-                let size = reader.metadata()?.len() as usize;
+                let size = reader.metadata()?.len();
 
                 info!("Writing eFuses from file: {}", file.display());
 

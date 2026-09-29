@@ -42,7 +42,7 @@ impl DeviceCommand for RscFlashArgs {
             return Err(anyhow!("Partition '{}' not found on device.", self.partition));
         };
 
-        if file_size > part.size as u64 {
+        if file_size > part.size {
             return Err(anyhow!(
                 "File size ({}) exceeds partition size ({}).",
                 file_size,
@@ -61,14 +61,7 @@ impl DeviceCommand for RscFlashArgs {
                 return Err(penumbra::error::PenumbraError::WrongProtocolVersion.into());
             };
 
-            set_rsc_info(
-                xflash,
-                port,
-                &part.name,
-                file_size as usize,
-                &mut reader,
-                &mut progress_callback,
-            )
+            set_rsc_info(xflash, port, &part.name, file_size, &mut reader, &mut progress_callback)
         })?;
 
         info!("Flashing to partition '{}' completed.", part.name);

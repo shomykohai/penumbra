@@ -55,7 +55,7 @@ impl DeviceCommand for WriteArgs {
             return Err(anyhow::anyhow!("Partition '{}' not found on device.", self.partition));
         };
 
-        let part_size = part.size as u64;
+        let part_size = part.size;
 
         let total_size = file_size.min(part_size);
         let pb = AntumbraProgress::new(total_size);

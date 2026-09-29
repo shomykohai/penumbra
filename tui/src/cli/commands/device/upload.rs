@@ -50,7 +50,7 @@ impl DeviceCommand for UploadArgs {
             return Err(anyhow::anyhow!("Partition '{}' not found on device.", self.partition));
         };
 
-        let total_size = part.size as u64;
+        let total_size = part.size;
         let pb = AntumbraProgress::new(total_size);
 
         let mut progress_callback = pb.get_callback("Reading partition...", "Read complete!");

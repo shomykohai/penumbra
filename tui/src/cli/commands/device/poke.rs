@@ -65,7 +65,7 @@ impl DeviceCommand for PokeArgs {
 
         info!("Writing 0x{:X} bytes to address 0x{:08X}...", length, self.address);
 
-        match dev.poke(self.address, length as usize, &mut reader, &mut progress_callback) {
+        match dev.poke(self.address, length, &mut reader, &mut progress_callback) {
             Ok(_) => {}
             Err(e) => {
                 pb.abandon("Write failed!");

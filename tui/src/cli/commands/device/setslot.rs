@@ -72,7 +72,7 @@ impl DeviceCommand for SetActiveSlotArgs {
 
         bootctrl.try_write(&mut new_data[OFFSET_SLOT_SUFFIX..])?;
 
-        dev.write_partition("misc", new_data.len(), &new_data[..], |_, _| {})?;
+        dev.write_partition("misc", new_data.len() as u64, &new_data[..], |_, _| {})?;
 
         info!("Active slot set to {:?}.", self.slot);
 
