@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Penumbra Flash Tool
+GenericName=MediaTek SoC Flasher
+Comment=Native GUI for flashing MediaTek-based devices via Penumbra
+Exec=penumbra-gui
+Icon=penumbra-gui
+Terminal=false
+Categories=Development;Utility;Electronics;
+Keywords=mediatek;mtk;flash;brom;preloader;scatter;
+StartupNotify=true
+StartupWMClass=Penumbra Flash Tool

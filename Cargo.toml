@@ -3,7 +3,8 @@ resolver = "3"
 members = [
     "core",
     "core/penumbra-macros",
-    "tui"
+    "tui",
+    "gui"
 ]
 default-members = ["tui"]
 

@@ -29,10 +29,20 @@ For more details, check the [installation guide](https://penumbra.itssho.my/Penu
 
 ## Usage
 
-Penumbra can be used both as a crate for interacting directly with a device with your own code, as well as providing a CLI and [TUI](tui).
+Penumbra can be used as a crate for interacting directly with a device, and includes a CLI, [TUI](tui), and native [GUI](gui).
 
-For learning how to use the TUI, [read the documentation here](https://penumbra.itssho.my/Penumbra/Antumbra/TUI)
-For using the CLI, [read the documentation with all commands here](https://penumbra.itssho.my/Penumbra/Antumbra/CLI)
+For learning how to use the TUI, [read the documentation here](https://penumbra.itssho.my/Penumbra/Antumbra/TUI).
+For using the CLI, [read the documentation with all commands here](https://penumbra.itssho.my/Penumbra/Antumbra/CLI).
+
+### Native desktop GUI
+
+The `penumbra-gui` application provides a graphical workflow for selecting DA, preloader, and auth files; connecting to a device; inspecting and backing up partitions; flashing individual images or scatter layouts; viewing live logs and progress; diagnosing host drivers; and rebooting or powering off the device.
+
+Critical bootloader partitions are protected from accidental erase operations. Device-identifier alteration is intentionally not provided.
+
+```sh
+cargo run --release -p penumbra-gui
+```
 
 For using the crate, a brief introduction is provided in the [crate documentation](https://penumbra.itssho.my/Penumbra/Crate/index).
 
@@ -97,6 +107,7 @@ Other learning resources I suggest are the following
 ## Credits
 
 * [ChimeraTool team](https://chimeratool.com/) - heapb8 was originally reverse-engineered from ChimeraTool.
+* [Swaggyxren/penumbraGUI contributors](https://github.com/Swaggyxren/penumbraGUI) - native GUI design, driver diagnostics, packaging assets, and safety UX.
 
 ## License
 

@@ -1,0 +1,35 @@
+# udev rules for MediaTek SoC USB ports used by Penumbra.
+#
+# Without these rules, libusb-backed tools (penumbra-gui, antumbra-libusb)
+# cannot open MediaTek BROM / Preloader / DA endpoints as a normal user and
+# the device shows up but `Connect` fails with `Permission denied (LIBUSB_ERROR_ACCESS)`.
+#
+# The VID/PID list mirrors core/src/connection/port.rs::KNOWN_PORTS.
+# After dropping this file in /usr/lib/udev/rules.d (or /etc/udev/rules.d for
+# a manual install) reload with:
+#
+#     sudo udevadm control --reload-rules
+#     sudo udevadm trigger
+#
+# Then unplug + replug the device.
+
+# MediaTek
+SUBSYSTEM=="usb", ATTR{idVendor}=="0e8d", ATTR{idProduct}=="0003", MODE="0660", TAG+="uaccess", GROUP="uucp"
+SUBSYSTEM=="usb", ATTR{idVendor}=="0e8d", ATTR{idProduct}=="6000", MODE="0660", TAG+="uaccess", GROUP="uucp"
+SUBSYSTEM=="usb", ATTR{idVendor}=="0e8d", ATTR{idProduct}=="2000", MODE="0660", TAG+="uaccess", GROUP="uucp"
+SUBSYSTEM=="usb", ATTR{idVendor}=="0e8d", ATTR{idProduct}=="2001", MODE="0660", TAG+="uaccess", GROUP="uucp"
+SUBSYSTEM=="usb", ATTR{idVendor}=="0e8d", ATTR{idProduct}=="20ff", MODE="0660", TAG+="uaccess", GROUP="uucp"
+SUBSYSTEM=="usb", ATTR{idVendor}=="0e8d", ATTR{idProduct}=="3000", MODE="0660", TAG+="uaccess", GROUP="uucp"
+
+# LG (Preloader)
+SUBSYSTEM=="usb", ATTR{idVendor}=="1004", ATTR{idProduct}=="6000", MODE="0660", TAG+="uaccess", GROUP="uucp"
+
+# OPPO (Preloader)
+SUBSYSTEM=="usb", ATTR{idVendor}=="22d9", ATTR{idProduct}=="0006", MODE="0660", TAG+="uaccess", GROUP="uucp"
+
+# Sony (BROM)
+SUBSYSTEM=="usb", ATTR{idVendor}=="0fce", ATTR{idProduct}=="f200", MODE="0660", TAG+="uaccess", GROUP="uucp"
+SUBSYSTEM=="usb", ATTR{idVendor}=="0fce", ATTR{idProduct}=="d1e9", MODE="0660", TAG+="uaccess", GROUP="uucp"
+SUBSYSTEM=="usb", ATTR{idVendor}=="0fce", ATTR{idProduct}=="d1e2", MODE="0660", TAG+="uaccess", GROUP="uucp"
+SUBSYSTEM=="usb", ATTR{idVendor}=="0fce", ATTR{idProduct}=="d1ec", MODE="0660", TAG+="uaccess", GROUP="uucp"
+SUBSYSTEM=="usb", ATTR{idVendor}=="0fce", ATTR{idProduct}=="d1dd", MODE="0660", TAG+="uaccess", GROUP="uucp"
