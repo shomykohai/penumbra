@@ -306,7 +306,17 @@ impl Xml {
             _ => "LINUX",
         };
 
-        xmlcmd_e!(self, port, SetRuntimeParameter, log_level, channel, system_os)?;
+        // Some V6 DAs need several seconds after the preloader jumps to DA1 before they emit
+        // their first CMD:START. Use the long transfer timeout only for this initial command,
+        // and always restore the caller's timeout even when initialization fails.
+        let previous_timeout = port.get_timeout();
+        port.set_timeout(MAX_TIMEOUT)?;
+        let runtime_result =
+            xmlcmd_e!(self, port, SetRuntimeParameter, log_level, channel, system_os);
+        let restore_result = port.set_timeout(previous_timeout);
+        runtime_result?;
+        restore_result?;
+
         xmlcmd_e!(self, port, HostSupportedCommands).ok();
         xmlcmd_e!(self, port, SetHostInfo, format!("Penumbra v{}", VERSION))?;
 

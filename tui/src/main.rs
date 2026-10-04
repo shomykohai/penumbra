@@ -19,6 +19,7 @@ mod cli;
 mod config;
 mod helpers;
 mod logger;
+mod safety;
 
 use anyhow::Result;
 use clap::Parser;

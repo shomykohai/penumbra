@@ -16,6 +16,7 @@ use penumbra::{Device, Partition, RPMB_FRAME_DATA_SZ, RpmbRegion, Storage};
 use super::worker::{DeviceCommand, DeviceEvent};
 use crate::components::ActivityExt;
 use crate::helpers::ScatterFiles;
+use crate::safety::is_critical_boot_partition;
 
 pub struct DeviceIo<'a> {
     event_tx: &'a Sender<DeviceEvent>,
@@ -275,6 +276,18 @@ impl DeviceAction for ErasePartition {
 
     fn run(&self, dev: &mut Device<'_, PortType>, io: &DeviceIo<'_>) -> anyhow::Result<bool> {
         let Some(partitions) = io.ask_partitions() else { return Ok(false) };
+
+        let critical: Vec<&str> = partitions
+            .iter()
+            .filter(|partition| is_critical_boot_partition(&partition.name))
+            .map(|partition| partition.name.as_str())
+            .collect();
+        if !critical.is_empty() {
+            return Err(anyhow::anyhow!(
+                "Refusing to erase critical boot partition(s): {}. Use the CLI with --force-critical only if you accept the permanent-brick risk.",
+                critical.join(", ")
+            ));
+        }
 
         let total_bytes: u64 = partitions.iter().map(|p| p.size).sum();
         let mut bytes_done: u64 = 0;
