@@ -505,12 +505,21 @@ impl<'a, P: MtkPort> Device<'a, P> {
         f(proto, port)
     }
 
+    /// Ensures the device is in DA mode and provides scoped access to both the DA protocol and the
+    /// MtkPort.
+    fn with_da_protocol<F, R>(&mut self, f: F) -> Result<R>
+    where
+        F: FnOnce(&mut DaProtocol<'a>, &mut P) -> Result<R>,
+    {
+        self.ensure_da_mode()?;
+        self.with_protocol(f)
+    }
+
     /// Retrieves info about the device storage.
     pub fn get_storage(&mut self) -> Option<StorageKind> {
-        self.ensure_da_mode().ok()?;
-
-        let protocol = self.protocol.as_mut().unwrap();
-        protocol.get_storage(&mut self.port).cloned()
+        self.with_da_protocol(|protocol, port| Ok(protocol.get_storage(port).cloned()))
+            .ok()
+            .flatten()
     }
 
     /// Returns a reference to the DevInfo struct, containing information about
@@ -687,15 +696,14 @@ impl<'a, P: MtkPort> Device<'a, P> {
         W: Writer,
         F: ProgressCallback,
     {
-        self.ensure_da_mode()?;
-
         let part = self
             .devinfo
             .get_partition(name)
             .ok_or_else(|| PenumbraError::PartitionNotFound(name.into()))?;
 
-        let protocol = self.protocol.as_mut().unwrap();
-        protocol.read_flash(&mut self.port, part.address, part.size, part.kind, writer, progress)
+        self.with_da_protocol(|protocol, port| {
+            protocol.read_flash(port, part.address, part.size, part.kind, writer, progress)
+        })
     }
 
     /// Writes data to a specified partition on the device.
@@ -723,15 +731,14 @@ impl<'a, P: MtkPort> Device<'a, P> {
         R: Reader,
         F: ProgressCallback,
     {
-        self.ensure_da_mode()?;
-
         let part = self
             .devinfo
             .get_partition(name)
             .ok_or_else(|| PenumbraError::PartitionNotFound(name.into()))?;
 
-        let protocol = self.protocol.as_mut().unwrap();
-        protocol.write_flash(&mut self.port, part.address, part.size, part.kind, reader, progress)
+        self.with_da_protocol(|protocol, port| {
+            protocol.write_flash(port, part.address, part.size, part.kind, reader, progress)
+        })
     }
 
     /// Erases a specified partition on the device.
@@ -763,15 +770,14 @@ impl<'a, P: MtkPort> Device<'a, P> {
     where
         F: ProgressCallback,
     {
-        self.ensure_da_mode()?;
-
         let part = self
             .devinfo
             .get_partition(name)
             .ok_or_else(|| PenumbraError::PartitionNotFound(name.into()))?;
 
-        let protocol = self.protocol.as_mut().unwrap();
-        protocol.erase_flash(&mut self.port, part.address, part.size, part.kind, progress)
+        self.with_da_protocol(|protocol, port| {
+            protocol.erase_flash(port, part.address, part.size, part.kind, progress)
+        })
     }
 
     /// Reads data from a specified offset and size on the device.
@@ -820,10 +826,9 @@ impl<'a, P: MtkPort> Device<'a, P> {
         W: Writer,
         F: ProgressCallback,
     {
-        self.ensure_da_mode()?;
-
-        let protocol = self.protocol.as_mut().unwrap();
-        protocol.read_flash(&mut self.port, address, size, section, writer, progress)
+        self.with_da_protocol(|protocol, port| {
+            protocol.read_flash(port, address, size, section, writer, progress)
+        })
     }
 
     /// Writes data to a specified offset and size on the device.
@@ -873,10 +878,9 @@ impl<'a, P: MtkPort> Device<'a, P> {
         R: Reader,
         F: ProgressCallback,
     {
-        self.ensure_da_mode()?;
-
-        let protocol = self.protocol.as_mut().unwrap();
-        protocol.write_flash(&mut self.port, address, size, section, reader, progress)
+        self.with_da_protocol(|protocol, port| {
+            protocol.write_flash(port, address, size, section, reader, progress)
+        })
     }
 
     /// Erases data at a specified offset and size on the device.
@@ -915,10 +919,9 @@ impl<'a, P: MtkPort> Device<'a, P> {
     where
         F: ProgressCallback,
     {
-        self.ensure_da_mode()?;
-
-        let protocol = self.protocol.as_mut().unwrap();
-        protocol.erase_flash(&mut self.port, address, size, section, progress)
+        self.with_da_protocol(|protocol, port| {
+            protocol.erase_flash(port, address, size, section, progress)
+        })
     }
 
     /// Like `write_flash`, but instead of writing using offsets and sizes from GPT,
@@ -967,10 +970,9 @@ impl<'a, P: MtkPort> Device<'a, P> {
         R: Reader,
         F: ProgressCallback,
     {
-        self.ensure_da_mode()?;
-
-        let protocol = self.protocol.as_mut().unwrap();
-        protocol.write_partition(&mut self.port, partition, size, reader, progress)
+        self.with_da_protocol(|protocol, port| {
+            protocol.write_partition(port, partition, size, reader, progress)
+        })
     }
 
     /// Like `read_flash`, but instead of reading using offsets and sizes from GPT,
@@ -1011,10 +1013,9 @@ impl<'a, P: MtkPort> Device<'a, P> {
         W: Writer,
         F: ProgressCallback,
     {
-        self.ensure_da_mode()?;
-
-        let protocol = self.protocol.as_mut().unwrap();
-        protocol.read_partition(&mut self.port, partition, writer, progress)
+        self.with_da_protocol(|protocol, port| {
+            protocol.read_partition(port, partition, writer, progress)
+        })
     }
 
     /// Formats a specified partition on the device.
@@ -1045,10 +1046,7 @@ impl<'a, P: MtkPort> Device<'a, P> {
     where
         F: ProgressCallback,
     {
-        self.ensure_da_mode()?;
-
-        let protocol = self.protocol.as_mut().unwrap();
-        protocol.format_partition(&mut self.port, partition, progress)
+        self.with_da_protocol(|protocol, port| protocol.format_partition(port, partition, progress))
     }
 
     /// Flashes the device partition using a scatter file.
@@ -1103,10 +1101,9 @@ impl<'a, P: MtkPort> Device<'a, P> {
         K: WriterSink<W>,
         F: ProgressCallback,
     {
-        self.ensure_da_mode()?;
-
-        let protocol = self.protocol.as_mut().unwrap();
-        protocol.flash_scatter(&mut self.port, scatter, reader_source, writer_sink, progress)
+        self.with_da_protocol(|protocol, port| {
+            protocol.flash_scatter(port, scatter, reader_source, writer_sink, progress)
+        })
     }
 
     /// Powers down the device and closes the connection when in DA mode.
@@ -1123,10 +1120,7 @@ impl<'a, P: MtkPort> Device<'a, P> {
     /// # }
     /// ```
     pub fn shutdown(&mut self) -> Result<()> {
-        self.ensure_da_mode()?;
-
-        let protocol = self.protocol.as_mut().unwrap();
-        protocol.shutdown(&mut self.port)
+        self.with_da_protocol(|protocol, port| protocol.shutdown(port))
     }
 
     /// Reboots the device into the requested `BootMode` (e.g., Normal, Fastboot, Recovery).
@@ -1144,10 +1138,7 @@ impl<'a, P: MtkPort> Device<'a, P> {
     /// # }
     /// ```
     pub fn reboot(&mut self, bootmode: BootMode) -> Result<()> {
-        self.ensure_da_mode()?;
-
-        let protocol = self.protocol.as_mut().unwrap();
-        protocol.reboot(&mut self.port, bootmode)
+        self.with_da_protocol(|protocol, port| protocol.reboot(port, bootmode))
     }
 
     /// Dumps efuse data from DA mode to a file.
@@ -1167,10 +1158,7 @@ impl<'a, P: MtkPort> Device<'a, P> {
     /// # }
     /// ```
     pub fn read_efuses<W: Writer>(&mut self, writer: W) -> Result<()> {
-        self.ensure_da_mode()?;
-
-        let protocol = self.protocol.as_mut().unwrap();
-        protocol.read_efuses(&mut self.port, writer)
+        self.with_da_protocol(|protocol, port| protocol.read_efuses(port, writer))
     }
 
     /// Blows efuses on the device from DA mode using data from a reader.
@@ -1192,10 +1180,7 @@ impl<'a, P: MtkPort> Device<'a, P> {
     /// # }
     /// ```
     pub fn write_efuses<R: Reader>(&mut self, reader: R, size: u64) -> Result<()> {
-        self.ensure_da_mode()?;
-
-        let protocol = self.protocol.as_mut().unwrap();
-        protocol.write_efuses(&mut self.port, reader, size)
+        self.with_da_protocol(|protocol, port| protocol.write_efuses(port, reader, size))
     }
 }
 
@@ -1218,10 +1203,7 @@ impl<'a, P: MtkPort> Device<'a, P> {
     /// # Ok(())
     /// # }
     pub fn set_seccfg_lock_state(&mut self, state: LockState) -> Result<()> {
-        self.ensure_da_mode()?;
-
-        let protocol = self.protocol.as_mut().unwrap();
-        protocol.set_seccfg_lock_state(&mut self.port, state)
+        self.with_da_protocol(|protocol, port| protocol.set_seccfg_lock_state(port, state))
     }
 
     /// Sets the desired lock state for the RPMB partition.
@@ -1243,10 +1225,7 @@ impl<'a, P: MtkPort> Device<'a, P> {
     /// # }
     /// ```
     pub fn set_rpmb_lock_state(&mut self, state: LockState) -> Result<()> {
-        self.ensure_da_mode()?;
-
-        let protocol = self.protocol.as_mut().unwrap();
-        protocol.set_rpmb_lock_state(&mut self.port, state)
+        self.with_da_protocol(|protocol, port| protocol.set_rpmb_lock_state(port, state))
     }
 
     /// Reads memory at the specified address.
@@ -1272,10 +1251,7 @@ impl<'a, P: MtkPort> Device<'a, P> {
         W: Writer,
         F: ProgressCallback,
     {
-        self.ensure_da_mode()?;
-
-        let protocol = self.protocol.as_mut().unwrap();
-        protocol.peek(&mut self.port, addr, size, writer, progress)
+        self.with_da_protocol(|protocol, port| protocol.peek(port, addr, size, writer, progress))
     }
 
     /// Writes memory to the specified address.
@@ -1301,10 +1277,7 @@ impl<'a, P: MtkPort> Device<'a, P> {
         R: Reader,
         F: ProgressCallback,
     {
-        self.ensure_da_mode()?;
-
-        let protocol = self.protocol.as_mut().unwrap();
-        protocol.poke(&mut self.port, addr, size, reader, progress)
+        self.with_da_protocol(|protocol, port| protocol.poke(port, addr, size, reader, progress))
     }
 
     /// Reads a 32bit value from a specific register.
@@ -1323,10 +1296,7 @@ impl<'a, P: MtkPort> Device<'a, P> {
     /// # }
     /// ```
     pub fn read_register(&mut self, addr: u64) -> Result<u32> {
-        self.ensure_da_mode()?;
-
-        let protocol = self.protocol.as_mut().unwrap();
-        protocol.read_register(&mut self.port, addr)
+        self.with_da_protocol(|protocol, port| protocol.read_register(port, addr))
     }
 
     /// Writes a 32bit value to a specific register.
@@ -1344,10 +1314,7 @@ impl<'a, P: MtkPort> Device<'a, P> {
     /// # }
     /// ```
     pub fn write_register(&mut self, addr: u64, value: u32) -> Result<()> {
-        self.ensure_da_mode()?;
-
-        let protocol = self.protocol.as_mut().unwrap();
-        protocol.write_register(&mut self.port, addr, value)
+        self.with_da_protocol(|protocol, port| protocol.write_register(port, addr, value))
     }
 
     /// Reads blocks from the specified RPMB region.
@@ -1382,10 +1349,9 @@ impl<'a, P: MtkPort> Device<'a, P> {
         W: Writer,
         F: ProgressCallback,
     {
-        self.ensure_da_mode()?;
-
-        let protocol = self.protocol.as_mut().unwrap();
-        protocol.read_rpmb(&mut self.port, region, start_sector, sectors_count, writer, progress)
+        self.with_da_protocol(|protocol, port| {
+            protocol.read_rpmb(port, region, start_sector, sectors_count, writer, progress)
+        })
     }
 
     /// Writes blocks to the specified RPMB region.
@@ -1418,10 +1384,9 @@ impl<'a, P: MtkPort> Device<'a, P> {
         R: Reader,
         F: ProgressCallback,
     {
-        self.ensure_da_mode()?;
-
-        let protocol = self.protocol.as_mut().unwrap();
-        protocol.write_rpmb(&mut self.port, region, start_sector, sectors_count, reader, progress)
+        self.with_da_protocol(|protocol, port| {
+            protocol.write_rpmb(port, region, start_sector, sectors_count, reader, progress)
+        })
     }
 
     /// Writes blocks to the specified RPMB region.
@@ -1451,10 +1416,9 @@ impl<'a, P: MtkPort> Device<'a, P> {
     where
         F: ProgressCallback,
     {
-        self.ensure_da_mode()?;
-
-        let protocol = self.protocol.as_mut().unwrap();
-        protocol.erase_rpmb(&mut self.port, region, start_sector, sectors_count, progress)
+        self.with_da_protocol(|protocol, port| {
+            protocol.erase_rpmb(port, region, start_sector, sectors_count, progress)
+        })
     }
 
     /// Authenticates the RPMB region with the provided key.
@@ -1481,10 +1445,7 @@ impl<'a, P: MtkPort> Device<'a, P> {
     /// # }
     /// ```
     pub fn auth_rpmb(&mut self, region: crate::storage::RpmbRegion, key: &[u8]) -> Result<()> {
-        self.ensure_da_mode()?;
-
-        let protocol = self.protocol.as_mut().unwrap();
-        protocol.auth_rpmb(&mut self.port, region, key)
+        self.with_da_protocol(|protocol, port| protocol.auth_rpmb(port, region, key))
     }
 
     /// Performs AES crypto operations with the device's crypto engine "SEJ"
@@ -1524,10 +1485,7 @@ impl<'a, P: MtkPort> Device<'a, P> {
         R: Reader,
         W: Writer,
     {
-        self.ensure_da_mode()?;
-
-        let protocol = self.protocol.as_mut().unwrap();
-        protocol.sej_aes(&mut self.port, params, reader, writer)
+        self.with_da_protocol(|protocol, port| protocol.sej_aes(port, params, reader, writer))
     }
 
     /// Derives a key using the device crypto engine (TZCC or SSR on newer V6 devices).
@@ -1549,12 +1507,9 @@ impl<'a, P: MtkPort> Device<'a, P> {
     /// # }
     /// ```
     pub fn derive_key_by_id(&mut self, id: KeyDeriveId, len: KeySize) -> Result<Vec<u8>> {
-        self.ensure_da_mode()?;
-
-        let protocol = self.protocol.as_mut().unwrap();
-
         let params = extensions::KeyDeriveParams::Id { id, len };
-        protocol.derive_key(&mut self.port, params)
+
+        self.with_da_protocol(|protocol, port| protocol.derive_key(port, params))
     }
 
     /// Derives a key using the device crypto engine (TZCC or SSR on newer V6 devices) with a custom
@@ -1583,11 +1538,7 @@ impl<'a, P: MtkPort> Device<'a, P> {
         salt: &[u8],
         len: KeySize,
     ) -> Result<Vec<u8>> {
-        self.ensure_da_mode()?;
-
-        let protocol = self.protocol.as_mut().unwrap();
-
         let params = extensions::KeyDeriveParams::Input { label, salt, len };
-        protocol.derive_key(&mut self.port, params)
+        self.with_da_protocol(|protocol, port| protocol.derive_key(port, params))
     }
 }
