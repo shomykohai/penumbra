@@ -28,7 +28,38 @@ impl<'a, P: MtkPort> PlProtocol<'a, P> {
         self.port.write_all(data)?;
         let mut buf = vec![0u8; size];
         self.port.read_exact(&mut buf)?;
-        if buf == data { Ok(()) } else { Err(ProtocolError::DataMismatch.into()) }
+        if buf == data {
+            return Ok(());
+        }
+
+        // Some preloaders reply with Uart1SetBaudrate (0xDC) instead of the
+        // command echo, asking the host to switch the baudrate before serving
+        // the command. Respond with the baudrate, then retry the command once.
+        if size == 1 && buf[0] == Command::Uart1SetBaudrate as u8 {
+            self.uart1_set_baudrate()?;
+            self.port.write_all(data)?;
+            let mut retry = vec![0u8; size];
+            self.port.read_exact(&mut retry)?;
+            if retry == data {
+                return Ok(());
+            }
+        }
+
+        Err(ProtocolError::DataMismatch.into())
+    }
+
+    /// Handles a device-initiated baudrate switch (`0xDC`).
+    /// The preloader asks the host to change baudrate: we reply with the
+    /// requested baudrate (big-endian u32) and read the status.
+    fn uart1_set_baudrate(&mut self) -> Result<()> {
+        const BAUDRATE: u32 = 921_600;
+        debug!("Preloader requested baudrate switch, responding with {BAUDRATE}");
+        self.port.write_u32_be(BAUDRATE)?;
+        match self.port.read_u16_be() {
+            Ok(status) => debug!("Baudrate switch status: 0x{status:04X}"),
+            Err(err) => debug!("Baudrate switch status not received: {err}"),
+        }
+        Ok(())
     }
 
     /// Performs the handshake sequence with the preloader/bootrom.
