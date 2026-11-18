@@ -18,6 +18,9 @@ pub struct LibUsbMTKPort {
     conn_type: ConnectionType,
     is_open: bool,
     port_name: String,
+    ctrl_num: u8,
+    bulk_num: u8,
+    ctrl_claimed: bool,
     in_endpoint: u8,
     out_endpoint: u8,
     timeout: Duration,
@@ -36,6 +39,8 @@ impl LibUsbMTKPort {
         handle: DeviceHandle<Context>,
         conn_type: ConnectionType,
         port_name: String,
+        ctrl_num: u8,
+        bulk_num: u8,
         in_endpoint: u8,
         out_endpoint: u8,
     ) -> Self {
@@ -44,6 +49,9 @@ impl LibUsbMTKPort {
             conn_type,
             is_open: false,
             port_name,
+            ctrl_num,
+            bulk_num,
+            ctrl_claimed: false,
             in_endpoint,
             out_endpoint,
             timeout: MIN_TIMEOUT,
@@ -52,34 +60,51 @@ impl LibUsbMTKPort {
         }
     }
 
-    fn find_bulk_endpoints(device: &Device<Context>) -> Option<(u8, u8)> {
+    fn find_endpoints_and_interfaces(device: &Device<Context>) -> Option<(u8, u8, u8, u8)> {
         let config = device.active_config_descriptor().ok()?;
+        let mut ctrl_num = None;
+        let mut bulk_num = None;
         let mut in_ep = None;
         let mut out_ep = None;
 
         for interface in config.interfaces() {
             for interface_desc in interface.descriptors() {
+                if interface_desc.class_code() == 0x02 && ctrl_num.is_none() {
+                    ctrl_num = Some(interface_desc.interface_number());
+                }
+
+                let mut iface_in_ep = None;
+                let mut iface_out_ep = None;
+
                 for endpoint in interface_desc.endpoint_descriptors() {
                     if endpoint.transfer_type() == rusb::TransferType::Bulk {
                         match endpoint.direction() {
-                            rusb::Direction::In if in_ep.is_none() => {
-                                in_ep = Some(endpoint.address());
+                            rusb::Direction::In if iface_in_ep.is_none() => {
+                                iface_in_ep = Some(endpoint.address());
                             }
-                            rusb::Direction::Out if out_ep.is_none() => {
-                                out_ep = Some(endpoint.address());
+                            rusb::Direction::Out if iface_out_ep.is_none() => {
+                                iface_out_ep = Some(endpoint.address());
                             }
                             _ => {}
                         }
                     }
                 }
+
+                if let (Some(i), Some(o)) = (iface_in_ep, iface_out_ep)
+                    && (bulk_num.is_none() || interface_desc.class_code() == 0x0A)
+                {
+                    bulk_num = Some(interface_desc.interface_number());
+                    in_ep = Some(i);
+                    out_ep = Some(o);
+                }
             }
         }
 
-        Some((in_ep?, out_ep?))
+        Some((ctrl_num.unwrap_or(0), bulk_num?, in_ep?, out_ep?))
     }
 
     pub fn setup_cdc(&mut self) -> Result<()> {
-        const CDC_INTERFACE: u16 = 1;
+        let cdc_interface = self.ctrl_num as u16;
         const SET_LINE_CODING: u8 = 0x20;
         const SET_CONTROL_LINE_STATE: u8 = 0x22;
         const LINE_CODING: [u8; 7] = [0x00, 0x10, 0x0E, 0x00, 0x00, 0x00, 0x08];
@@ -93,7 +118,7 @@ impl LibUsbMTKPort {
                 request_type,
                 SET_LINE_CODING,
                 0,
-                CDC_INTERFACE,
+                cdc_interface,
                 &LINE_CODING,
                 Duration::from_millis(100),
             )
@@ -104,7 +129,7 @@ impl LibUsbMTKPort {
                 request_type,
                 SET_CONTROL_LINE_STATE,
                 CONTROL_LINE_STATE,
-                CDC_INTERFACE,
+                cdc_interface,
                 &[],
                 Duration::from_millis(100),
             )
@@ -125,9 +150,18 @@ impl LibUsbMTKPort {
 
         let port_name = format!("USB {:04X}:{:04X} (libusb)", vid, pid);
         let handle = device.open().ok()?;
-        let (in_endpoint, out_endpoint) = Self::find_bulk_endpoints(device)?;
+        let (ctrl_num, bulk_num, in_endpoint, out_endpoint) =
+            Self::find_endpoints_and_interfaces(device)?;
 
-        Some(Self::new(handle, connection_type, port_name, in_endpoint, out_endpoint))
+        Some(Self::new(
+            handle,
+            connection_type,
+            port_name,
+            ctrl_num,
+            bulk_num,
+            in_endpoint,
+            out_endpoint,
+        ))
     }
 
     pub fn find_device(vid: Option<u16>, pid: Option<u16>) -> Result<Option<Self>> {
@@ -168,23 +202,44 @@ impl MtkPort for LibUsbMTKPort {
             return Ok(());
         }
 
-        for interface in 0..=1 {
-            #[cfg(not(target_os = "windows"))]
-            {
-                match self.handle.kernel_driver_active(interface) {
-                    Ok(true) => {
-                        self.handle.detach_kernel_driver(interface)?;
-                    }
-                    Ok(false) => {}
-                    Err(_) => {
-                        return Err(Error::Connection(ConnectionError::OpenFailed(
-                            "Kernel driver check failed (USB)".to_string(),
-                        )));
-                    }
-                }
+        if self.ctrl_num != self.bulk_num {
+            #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+            if self.handle.kernel_driver_active(self.ctrl_num) == Ok(true) {
+                let _ = self.handle.detach_kernel_driver(self.ctrl_num);
             }
 
-            self.handle.claim_interface(interface)?;
+            match self.handle.claim_interface(self.ctrl_num) {
+                Ok(()) => self.ctrl_claimed = true,
+                Err(e) => {
+                    debug!("CDC control interface {} not claimed ({e})", self.ctrl_num);
+                    self.ctrl_claimed = false;
+                }
+            }
+        }
+
+        #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+        match self.handle.kernel_driver_active(self.bulk_num) {
+            Ok(true) => self.handle.detach_kernel_driver(self.bulk_num)?,
+            Ok(false) => {}
+            Err(_) => {
+                return Err(Error::Connection(ConnectionError::OpenFailed(
+                    "Kernel driver check failed (USB)".to_string(),
+                )));
+            }
+        }
+
+        if let Err(e) = self.handle.claim_interface(self.bulk_num) {
+            #[cfg(target_os = "macos")]
+            if self.handle.kernel_driver_active(self.bulk_num) == Ok(true)
+                && self.handle.detach_kernel_driver(self.bulk_num).is_ok()
+            {
+                self.handle.claim_interface(self.bulk_num)?;
+            } else {
+                return Err(e.into());
+            }
+
+            #[cfg(not(target_os = "macos"))]
+            return Err(e.into());
         }
 
         if self.conn_type != ConnectionType::Brom
@@ -203,10 +258,15 @@ impl MtkPort for LibUsbMTKPort {
             return Ok(());
         }
 
-        for iface in 0..=1 {
-            if let Err(e) = self.handle.release_interface(iface) {
-                debug!("Could not release interface {}: {:?}", iface, e);
+        if self.ctrl_claimed {
+            if let Err(e) = self.handle.release_interface(self.ctrl_num) {
+                debug!("Could not release interface {}: {:?}", self.ctrl_num, e);
             }
+            self.ctrl_claimed = false;
+        }
+
+        if let Err(e) = self.handle.release_interface(self.bulk_num) {
+            debug!("Could not release interface {}: {:?}", self.bulk_num, e);
         }
 
         self.is_open = false;
