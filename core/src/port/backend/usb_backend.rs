@@ -276,26 +276,28 @@ impl MtkPort for UsbMTKPort {
         let start = std::time::Instant::now();
         let poll_interval = Duration::from_millis(200);
 
-        let mut new_device_info = None;
+        let conn_type = KNOWN_PORTS
+            .iter()
+            .find(|&&(k_vid, k_pid, _)| k_vid == vid && k_pid == pid)
+            .map(|&(_, _, ct)| ct)
+            .unwrap_or(self.conn_type);
 
         while start.elapsed() < MAX_TIMEOUT {
             if let Ok(devices) = nusb::list_devices().wait()
                 && let Some(dev) =
                     devices.into_iter().find(|d| d.vendor_id() == vid && d.product_id() == pid)
             {
-                new_device_info = Some(dev);
-                break;
+                self.info = dev;
+                self.conn_type = conn_type;
+                if self.open().is_ok() {
+                    return Ok(());
+                }
             }
 
             std::thread::sleep(poll_interval);
         }
 
-        let info = new_device_info.ok_or(ConnectionError::Timeout)?;
-
-        self.info = info;
-        self.open()?;
-
-        Ok(())
+        Err(Error::Connection(ConnectionError::Timeout))
     }
 
     fn read_exact(&mut self, buf: &mut [u8]) -> Result<usize> {
